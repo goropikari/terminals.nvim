@@ -233,7 +233,6 @@ local function setup_autocmds()
       local tabpage = state.current_tabpage()
       local winid = vim.api.nvim_get_current_win()
       local bufnr = vim.api.nvim_get_current_buf()
-      terminal.register_or_reject_terminal_window(tabpage, winid, bufnr)
       if state.find_terminal_by_bufnr(bufnr, tabpage) and state.is_terminal_window(winid, tabpage) then
         state.add_terminal_window(winid, tabpage)
       elseif #state.terminal_windows(tabpage) == 0 then

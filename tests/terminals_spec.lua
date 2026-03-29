@@ -350,6 +350,21 @@ describe('terminals.nvim', function()
     assert.are.same(state.find_terminal(ids[3]).bufnr, vim.api.nvim_win_get_buf(right))
   end)
 
+  it('does not auto-register a regular window that shows a terminal buffer', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    terminal.create({ title = 'one' })
+    local managed_before = vim.deepcopy(state.terminal_windows())
+    local bufnr = state.active().bufnr
+
+    vim.cmd('new')
+    vim.cmd('buffer ' .. bufnr)
+
+    assert.are.same(managed_before, state.terminal_windows())
+    assert.is_false(state.is_terminal_window(vim.api.nvim_get_current_win()))
+  end)
+
   it('cycles only the current managed split', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
@@ -370,7 +385,7 @@ describe('terminals.nvim', function()
     assert.are.same(ids[3], state.window_terminal(right).id)
   end)
 
-  it('maps manual split from a terminal window to a managed terminal split', function()
+  it('creates a managed split from a terminal window via TerminalSplit', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
 
@@ -378,7 +393,7 @@ describe('terminals.nvim', function()
     local windows_before = #vim.api.nvim_tabpage_list_wins(0)
 
     vim.api.nvim_set_current_win(state.terminal_window())
-    vim.cmd('split')
+    vim.cmd('TerminalSplit')
     wait_for(function()
       return #vim.api.nvim_tabpage_list_wins(0) == windows_before + 1
     end)
@@ -392,7 +407,7 @@ describe('terminals.nvim', function()
 
     terminal.create({ title = 'one' })
     local bufnr = state.active().bufnr
-    vim.cmd('split')
+    vim.cmd('TerminalSplit')
     local windows_before = #vim.api.nvim_tabpage_list_wins(0)
     local managed = state.terminal_windows()
 
