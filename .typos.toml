@@ -1,0 +1,5 @@
+[files]
+extend-exclude = ["deps/"]
+
+[default.extend-words]
+enew = "enew"
