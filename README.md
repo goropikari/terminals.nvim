@@ -33,7 +33,7 @@ Using `lazy.nvim`:
 
 ```lua
 {
-  "your-name/terminals.nvim",
+  "goropikari/terminals.nvim",
   opts = {
     auto_close_on_exit = true,
     focus_terminal_on_open = true,
