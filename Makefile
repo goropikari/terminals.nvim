@@ -1,7 +1,13 @@
-.PHONY: nvim fmt lint test
+.PHONY: nvim zellij tmux fmt lint test
 
 nvim:
 	nvim -u $(CURDIR)/dev/init.lua
+
+zellij:
+	TERMINALS_BACKEND=zellij nvim -u $(CURDIR)/dev/init.lua
+
+tmux:
+	TERMINALS_BACKEND=tmux nvim -u $(CURDIR)/dev/init.lua
 
 fmt:
 	stylua -g '*.lua' -- .

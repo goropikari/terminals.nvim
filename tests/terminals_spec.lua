@@ -152,12 +152,18 @@ describe('terminals.nvim', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
 
-    terminal.create({ title = 'one' })
     local first_tab = vim.api.nvim_get_current_tabpage()
+    local dir1 = vim.fn.tempname()
+    vim.fn.mkdir(dir1, 'p')
+    vim.cmd('tcd ' .. dir1)
+    terminal.create({ title = 'one' })
 
     vim.cmd('tabnew')
-    terminal.create({ title = 'two' })
     local second_tab = vim.api.nvim_get_current_tabpage()
+    local dir2 = vim.fn.tempname()
+    vim.fn.mkdir(dir2, 'p')
+    vim.cmd('tcd ' .. dir2)
+    terminal.create({ title = 'two' })
 
     assert.are.same(1, #state.list(first_tab))
     assert.are.same(1, #state.list(second_tab))
@@ -170,12 +176,18 @@ describe('terminals.nvim', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
 
-    terminal.create({ title = 'one' })
     local first_tab = vim.api.nvim_get_current_tabpage()
+    local dir1 = vim.fn.tempname()
+    vim.fn.mkdir(dir1, 'p')
+    vim.cmd('tcd ' .. dir1)
+    terminal.create({ title = 'one' })
     local first_win = state.terminal_window(first_tab)
 
     vim.cmd('tabnew')
     local second_tab = vim.api.nvim_get_current_tabpage()
+    local dir2 = vim.fn.tempname()
+    vim.fn.mkdir(dir2, 'p')
+    vim.cmd('tcd ' .. dir2)
     terminals.set_tab_policy({
       terminal_position = 'float',
       float = {
@@ -831,5 +843,86 @@ describe('terminals.nvim', function()
       local content = table.concat(terminal_lines(target), '\n')
       return content:match('irst ') ~= nil
     end)
+  end)
+end)
+
+describe('terminals.nvim session persistence', function()
+  before_each(function()
+    setup({ auto_restore = false }) -- Disable auto_restore to manually trigger it
+  end)
+
+  it('serializes and deserializes terminal state correctly', function()
+    local state = require('terminals.state')
+    local terminal = require('terminals.terminal')
+
+    terminal.create({ title = 'term1' })
+    terminal.create({ title = 'term2' })
+    local cwd = vim.fn.getcwd()
+
+    local serialized = state.serialize()
+    assert.is_not_nil(serialized.projects[cwd])
+    assert.are.same(2, #serialized.projects[cwd].terminals)
+    assert.are.same('term1', serialized.projects[cwd].terminals[1].title)
+    assert.are.same('term2', serialized.projects[cwd].terminals[2].title)
+    assert.are.same(2, serialized.projects[cwd].active_index)
+  end)
+
+  it('saves and loads session data from disk', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    terminal.create({ title = 'disk-test' })
+    state.save()
+
+    -- Clear current state in memory
+    package.loaded['terminals.state'] = nil
+    state = require('terminals.state')
+
+    local loaded = state.load()
+    local cwd = vim.fn.getcwd()
+    assert.is_not_nil(loaded)
+    assert.is_not_nil(loaded.projects[cwd])
+    assert.are.same('disk-test', loaded.projects[cwd].terminals[1].title)
+  end)
+
+  it('restores terminals from session data', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    terminal.create({ title = 'restore-1' })
+    terminal.create({ title = 'restore-2' })
+    local data = state.serialize()
+
+    -- Reset the editor to a clean state
+    reset_editor()
+    setup({ auto_restore = false })
+
+    -- Restore
+    terminal.restore(data, { show = true })
+
+    local list = state.list()
+    assert.are.same(2, #list)
+    assert.are.same('restore-1', list[1].title)
+    assert.are.same('restore-2', list[2].title)
+    assert.are.same('restore-2', state.active().title)
+    assert.is_not_nil(state.terminal_window())
+  end)
+
+  it('preserves terminal window layout after restoration', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    terminal.create({ title = 'main' })
+    -- Ensure the layout is captured
+    state.set_window_layout({ position = 'bottom', height = 15 })
+
+    local data = state.serialize()
+
+    reset_editor()
+    setup({ auto_restore = false })
+
+    terminal.restore(data, { show = true })
+
+    assert.are.same(15, vim.api.nvim_win_get_height(state.terminal_window()))
   end)
 end)

@@ -1,8 +1,12 @@
 vim.g.mapleader = ','
 
-vim.opt.runtimepath:prepend('/home/ubuntu/workspace/github/terminals.nvim')
+-- vim.opt.runtimepath:prepend('/home/ubuntu/workspace/github/terminals.nvim')
+vim.opt.runtimepath:prepend(vim.fn.getcwd())
+
+local backend = os.getenv('TERMINALS_BACKEND') or 'none'
 
 require('terminals').setup({
+  backend = backend,
   keymaps = {
     next = { lhs = '<A-n>', modes = { 'n', 't' } },
     move_right = { lhs = '<C-A-n>', modes = { 'n', 't' } },

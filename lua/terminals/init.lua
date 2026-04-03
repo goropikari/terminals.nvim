@@ -15,6 +15,16 @@ M.config = {
   },
   osc_title = true,
   shell = nil,
+  auto_restore = true,
+  backend = 'none',
+  backends = {
+    zellij = {
+      config_path = nil,
+    },
+    tmux = {
+      config_path = nil,
+    },
+  },
   start_in_insert = true,
   terminal_position = 'bottom',
   terminal_height = 12,
@@ -153,6 +163,17 @@ local function setup_commands()
 
     terminal.send_range(opts.line1, opts.line2)
   end, { range = true })
+
+  vim.api.nvim_create_user_command('TerminalSave', function()
+    require('terminals.state').save()
+  end, {})
+
+  vim.api.nvim_create_user_command('TerminalRestore', function()
+    local data = require('terminals.state').load()
+    if data then
+      require('terminals.terminal').restore(data, { show = true })
+    end
+  end, {})
 end
 
 ---@param tabpage integer
@@ -225,7 +246,7 @@ end
 local function setup_autocmds()
   local group = vim.api.nvim_create_augroup('TerminalsNvim', { clear = true })
 
-  vim.api.nvim_create_autocmd({ 'TabEnter', 'WinEnter', 'BufEnter' }, {
+  vim.api.nvim_create_autocmd({ 'TabEnter', 'WinEnter', 'BufEnter', 'DirChanged' }, {
     group = group,
     callback = function()
       local state = require('terminals.state')
@@ -334,7 +355,26 @@ local function setup_autocmds()
         return
       end
       terminals._is_quitting = true
+      require('terminals.state').save()
       require('terminals.terminal').cleanup_for_quit()
+    end,
+  })
+
+  vim.api.nvim_create_autocmd('VimEnter', {
+    group = group,
+    callback = function()
+      local terminals = require('terminals')
+      if not terminals.config.auto_restore then
+        return
+      end
+
+      -- Defer a bit to ensure CWD and layout are settled
+      vim.schedule(function()
+        local data = require('terminals.state').load()
+        if data then
+          require('terminals.terminal').restore(data, { show = false })
+        end
+      end)
     end,
   })
 end
