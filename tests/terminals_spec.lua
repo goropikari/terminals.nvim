@@ -75,6 +75,29 @@ local function reset_editor()
   pcall(vim.cmd, 'new')
 end
 
+local all_commands = {
+  'TerminalNew',
+  'TerminalOpen',
+  'TerminalToggle',
+  'TerminalCloseWindow',
+  'TerminalSplit',
+  'TerminalVSplit',
+  'TerminalSetPosition',
+  'TerminalNext',
+  'TerminalPrev',
+  'TerminalClose',
+  'TerminalPicker',
+  'TerminalRename',
+  'TerminalMoveLeft',
+  'TerminalMoveRight',
+  'TerminalSendLine',
+  'TerminalSendSelection',
+  'TerminalSave',
+  'TerminalRestore',
+  'TerminalClean',
+  'TerminalCleanAll',
+}
+
 local function setup(opts)
   reset_editor()
   require('terminals').setup(vim.tbl_deep_extend('force', {
@@ -82,6 +105,7 @@ local function setup(opts)
     focus_terminal_on_open = true,
     start_in_insert = false,
     terminal_position = 'bottom',
+    commands = all_commands,
   }, opts or {}))
 end
 
