@@ -46,7 +46,7 @@ make clean
 
 ### Key Architecture Concepts
 
-1. **CWD-based project isolation**: Each project directory has isolated terminal state stored in `~/.local/share/nvim/terminals.nvim/state_<hash>.json`
+1. **CWD-based project isolation**: Each project directory has isolated terminal state stored in `~/.local/state/nvim/terminals.nvim/state_<hash>.json`
 
 2. **Terminal window model**: Each tabpage has a primary terminal window (`primary_terminal_winid`) and can have multiple managed terminal windows (`terminal_winids`)
 

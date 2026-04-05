@@ -482,8 +482,8 @@ end
 
 ---@return string
 local function get_state_dir()
-  local data_path = vim.fn.stdpath('data')
-  local dir = string.format('%s/terminals.nvim', data_path)
+  local state_path = vim.fn.stdpath('state')
+  local dir = string.format('%s/terminals.nvim', state_path)
   if vim.fn.isdirectory(dir) == 0 then
     vim.fn.mkdir(dir, 'p')
   end
