@@ -36,6 +36,7 @@ Using `lazy.nvim`:
 ```lua
 {
   "goropikari/terminals.nvim",
+  lazy = false,  -- Session persistence may not work properly with lazy loading
   opts = {
     auto_close_on_exit = true,
     focus_terminal_on_open = true,
