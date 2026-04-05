@@ -63,35 +63,6 @@ Using `lazy.nvim`:
 }
 ```
 
-If you only want the raw `setup()` example:
-
-```lua
-require("terminals").setup({
-  shell = vim.o.shell,
-  auto_close_on_exit = true,
-  focus_terminal_on_open = true,
-  keymaps = {
-    toggle = { lhs = "<C-t>", modes = { "n", "t" } },
-    new = { lhs = "<C-n>", modes = { "n", "t" } },
-    next = { lhs = "<A-l>", modes = { "n", "t" } },
-    prev = { lhs = "<A-h>", modes = { "n", "t" } },
-    move_left = { lhs = "<C-A-h>", modes = { "n", "t" } },
-    move_right = { lhs = "<C-A-l>", modes = { "n", "t" } },
-    close = { lhs = "<A-w>", modes = { "n", "t" } },
-  },
-  osc_title = true,
-  start_in_insert = true,
-  terminal_position = "bottom",
-  terminal_height = 12,
-  terminal_width = 80,
-  float = {
-    width = 0.9,
-    height = 0.3,
-    border = "rounded",
-  },
-})
-```
-
 ## Configuration
 
 Available options:
@@ -142,138 +113,62 @@ require("terminals").setup({
 })
 ```
 
-## Commands
+## API
 
-- `:TerminalNew [cmd]`
-- `:TerminalOpen`
-- `:TerminalToggle`
-- `:TerminalSave`: manually save the current project terminal state
-- `:TerminalRestore`: manually restore the terminal state for the current project
-- `:TerminalCloseWindow`
-- `:TerminalSplit`
-- `:TerminalVSplit`
-- `:TerminalSetPosition {bottom|top|left|right|float}`
-- `:TerminalNext`
-- `:TerminalPrev`
-- `:TerminalClose`
-- `:TerminalPicker [ui_select|telescope]`
-- `:TerminalRename {title}`
-- `:TerminalMoveLeft`
-- `:TerminalMoveRight`
-- `:TerminalSendLine`
-- `:TerminalSendSelection`
+### Create / Open / Toggle
 
-## Lua API
+| Command | Lua |
+|---------|-----|
+| `:TerminalNew [cmd]` | `require("terminals.terminal").create({ cmd = "cmd", title = "title" })` |
+| `:TerminalOpen` | `require("terminals.terminal").show(id)` |
+| `:TerminalToggle` | `require("terminals.terminal").toggle()` |
+| `:TerminalClose` | `require("terminals.terminal").close(id)` |
+| `:TerminalCloseWindow` | `require("terminals").clear_tab_policy()` |
+| `:TerminalSplit` | `require("terminals").set_tab_policy({ terminal_position = "bottom" })` |
+| `:TerminalVSplit` | `require("terminals").set_tab_policy({ terminal_position = "left" })` |
 
-Main setup module:
+### Session Persistence
+
+| Command | Lua |
+|---------|-----|
+| `:TerminalSave` | `require("terminals.state").save()` |
+| `:TerminalRestore` | `require("terminals.terminal").restore(data, { show = true })` |
+| `:TerminalClean` | `require("terminals.state").clean()` |
+| `:TerminalCleanAll` | `require("terminals.state").clean_all()` |
+
+### Navigation
+
+| Command | Lua |
+|---------|-----|
+| `:TerminalNext` | `require("terminals.terminal").cycle(1)` |
+| `:TerminalPrev` | `require("terminals.terminal").cycle(-1)` |
+| `:TerminalMoveLeft` | `require("terminals.state").move_left(id)` |
+| `:TerminalMoveRight` | `require("terminals.state").move_right(id)` |
+
+### Terminal Picker
+
+| Command | Lua |
+|---------|-----|
+| `:TerminalPicker [ui_select\|telescope]` | `require("terminals.terminal").pick({ backend = "telescope" })` |
+
+### Terminal Operations
+
+| Command | Lua |
+|---------|-----|
+| `:TerminalRename {title}` | `require("terminals.terminal").rename(id, "title")` |
+| `:TerminalSendLine` | `require("terminals.terminal").send_current_line()` |
+| `:TerminalSendSelection` | `require("terminals.terminal").send_visual_selection()` |
+
+### Window Configuration
+
+| Command | Lua |
+|---------|-----|
+| `:TerminalSetPosition {bottom\|top\|left\|right\|float}` | `require("terminals").set_tab_policy({ terminal_position = "float", float = { ... } })` |
+
+### Setup
 
 ```lua
 require("terminals").setup(opts)
-require("terminals").get_tab_policy()
-require("terminals").set_tab_policy({
-  terminal_position = "float",
-  float = {
-    width = 0.8,
-    height = 0.35,
-  },
-})
-require("terminals").replace_tab_policy({
-  terminal_position = "left",
-  terminal_width = 40,
-})
-require("terminals").clear_tab_policy()
-```
-
-Terminal operations:
-
-```lua
-local terminal = require("terminals.terminal")
-
-terminal.create({ cmd = "htop", cwd = vim.loop.cwd(), title = "monitor" })
-terminal.show(id)
-terminal.toggle()
-terminal.cycle(1)   -- next
-terminal.cycle(-1)  -- prev
-terminal.pick()
-terminal.pick({ backend = "telescope" })
-terminal.send("npm test")
-terminal.send_current_line()
-terminal.send_visual_selection()
-terminal.rename(id, "server")
-terminal.close(id)
-```
-
-Useful helpers:
-
-```lua
-local terminal = require("terminals.terminal")
-local state = require("terminals.state")
-
-local current = terminal.current_or_active()
-local active_id = terminal.active_id()
-
-local terminals = state.list()
-local active = state.active()
-state.move_left(active.id)
-state.move_right(active.id)
-```
-
-Common examples:
-
-Create a new terminal from Lua:
-
-```lua
-require("terminals.terminal").create()
-```
-
-Open a specific command:
-
-```lua
-require("terminals.terminal").create({
-  cmd = "lazygit",
-  title = "git",
-})
-```
-
-Toggle managed terminal windows:
-
-```lua
-require("terminals.terminal").toggle()
-```
-
-Open a terminal picker:
-
-```lua
-require("terminals.terminal").pick()
-```
-
-Use Telescope when available:
-
-```lua
-require("terminals.terminal").pick({
-  backend = "telescope",
-})
-```
-
-Use a different window policy in the current tabpage:
-
-```lua
-require("terminals").set_tab_policy({
-  terminal_position = "left",
-  terminal_width = 40,
-})
-```
-
-Send the current line:
-
-```lua
-require("terminals.terminal").send_current_line()
-```
-
-Send the current visual selection:
-
-```lua
-require("terminals.terminal").send_visual_selection()
 ```
 
 ## Keymap Examples

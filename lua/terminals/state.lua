@@ -675,7 +675,19 @@ function M.clean()
   state.projects = {}
   state.next_terminal_id = 1
 
-  -- Clear on-disk state
+  -- Clear on-disk state for current project
+  local path = get_state_file()
+  if path then
+    os.remove(path)
+  end
+end
+
+function M.clean_all()
+  -- Clear in-memory state
+  state.projects = {}
+  state.next_terminal_id = 1
+
+  -- Clear all on-disk state files
   local dir = get_state_dir()
   local files = vim.fn.glob(dir .. '/state_*.json', false, true)
   for _, file in ipairs(files) do

@@ -180,6 +180,23 @@ local function setup_commands()
     require('terminals.state').clean()
     vim.notify('Terminals.nvim: Session data cleared.', vim.log.levels.INFO)
   end, {})
+
+  vim.api.nvim_create_user_command('TerminalCleanAll', function()
+    local state = require('terminals.state')
+    state.clean()
+    -- Also remove the state directory itself to ensure all project states are cleared
+    local data_path = vim.fn.stdpath('data')
+    local dir = string.format('%s/terminals.nvim', data_path)
+    if vim.fn.isdirectory(dir) == 1 then
+      local files = vim.fn.glob(dir .. '/*', false, true)
+      for _, file in ipairs(files) do
+        if file:match('%.json$') then
+          os.remove(file)
+        end
+      end
+    end
+    vim.notify('Terminals.nvim: All session data cleared.', vim.log.levels.INFO)
+  end, {})
 end
 
 -- Autocommands
