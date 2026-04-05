@@ -313,16 +313,6 @@ local function ensure_terminal_window(tabpage)
 end
 
 ---@param cmd? string
----@param tabpage? integer
----@return string
-local function shell_for_command(cmd, tabpage)
-  if cmd and cmd ~= '' then
-    return cmd
-  end
-  return config(tabpage).shell or vim.o.shell
-end
-
----@param cmd? string
 ---@param cwd string
 ---@param tabpage? integer
 ---@return string
