@@ -314,8 +314,9 @@ Inside the terminal `winbar`:
 `terminals.nvim` manages terminal state based on your current working directory (CWD). This allows you to have different sets of terminals for different projects.
 
 By default, `auto_restore = true` is enabled, which:
-1.  **Saves** the terminal list and layout when you close Neovim.
-2.  **Restores** the terminals and splits when you open Neovim in the same directory.
+
+1. **Saves** the terminal list and layout when you close Neovim.
+2. **Restores** the terminals and splits when you open Neovim in the same directory.
 
 If you use `zellij` or `tmux` as a backend, the plugin will automatically attach to the corresponding session/window, allowing your terminal processes to survive even if Neovim is closed.
 
@@ -330,6 +331,7 @@ require("terminals").setup({
 ```
 
 When a backend is enabled:
+
 - Each terminal tab in Neovim corresponds to a unique session (Zellij) or window (Tmux).
 - The plugin automatically generates a minimal configuration for the backend to ensure it looks like a raw terminal inside Neovim (no status bars, no borders).
 - Processes remain alive even if you close the Neovim terminal buffer or Neovim itself.

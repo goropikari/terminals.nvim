@@ -1,4 +1,4 @@
-.PHONY: nvim zellij tmux fmt lint test
+.PHONY: nvim zellij tmux fmt lint test clean
 
 nvim:
 	nvim -u $(CURDIR)/dev/init.lua
@@ -19,3 +19,6 @@ lint:
 test:
 	nvim --headless --clean -u $(CURDIR)/tests/minimal_init.lua \
 		-c "lua require('plenary.test_harness').test_directory('$(CURDIR)/tests', { minimal_init = '$(CURDIR)/tests/minimal_init.lua', sequential = true })"
+
+clean:
+	rm -rf ~/.local/share/nvim/terminals.nvim

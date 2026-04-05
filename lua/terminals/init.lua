@@ -171,10 +171,18 @@ local function setup_commands()
   vim.api.nvim_create_user_command('TerminalRestore', function()
     local data = require('terminals.state').load()
     if data then
+      M._did_restore = true
       require('terminals.terminal').restore(data, { show = true })
     end
   end, {})
+
+  vim.api.nvim_create_user_command('TerminalClean', function()
+    require('terminals.state').clean()
+    vim.notify('Terminals.nvim: Session data cleared.', vim.log.levels.INFO)
+  end, {})
 end
+
+-- Autocommands
 
 ---@param tabpage integer
 local function reopen_tab_terminal_window(tabpage)
@@ -360,23 +368,56 @@ local function setup_autocmds()
     end,
   })
 
-  vim.api.nvim_create_autocmd('VimEnter', {
+  vim.api.nvim_create_autocmd({ 'VimEnter', 'SessionLoadPost' }, {
     group = group,
-    callback = function()
+    callback = function(ev)
       local terminals = require('terminals')
       if not terminals.config.auto_restore then
         return
       end
 
-      -- Defer a bit to ensure CWD and layout are settled
-      vim.schedule(function()
+      -- If a session is being loaded, VimEnter is too early and incomplete.
+      -- We must rely on SessionLoadPost.
+      if ev.event == 'VimEnter' and (vim.v.this_session ~= '' or vim.g.SessionLoad) then
+        return
+      end
+
+      -- SessionLoadPost should always trigger a fresh restore because the
+      -- whole tab/window layout has been replaced by mksession.
+      if ev.event == 'SessionLoadPost' then
+        terminals._did_restore = false
+      end
+
+      -- Defer to ensure CWD and tabpages are fully settled by session plugins.
+      vim.defer_fn(function()
+        if terminals._did_restore then
+          return
+        end
+
         local data = require('terminals.state').load()
         if data then
+          terminals._did_restore = true
           require('terminals.terminal').restore(data, { show = false })
         end
-      end)
+      end, 200)
     end,
   })
+
+  -- If the plugin is lazy-loaded after VimEnter or SessionLoadPost,
+  -- trigger an immediate restore if auto_restore is enabled.
+  if M.config.auto_restore then
+    vim.defer_fn(function()
+      if M._did_restore then
+        return
+      end
+
+      local data = require('terminals.state').load()
+      if data then
+        M._did_restore = true
+        require('terminals.terminal').restore(data, { show = false })
+      end
+    end, 200)
+  end
 end
 
 ---@param opts? table

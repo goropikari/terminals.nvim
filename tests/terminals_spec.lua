@@ -925,4 +925,26 @@ describe('terminals.nvim session persistence', function()
 
     assert.are.same(15, vim.api.nvim_win_get_height(state.terminal_window()))
   end)
+
+  it('clears all session data and reset memory state via TerminalClean', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    -- Create some session data
+    terminal.create({ title = 'to-be-cleaned' })
+    state.save()
+
+    local loaded = state.load()
+    assert.is_not_nil(loaded)
+
+    -- Run the clean command
+    vim.cmd('TerminalClean')
+
+    -- Memory state should be reset
+    assert.are.same(0, #state.list())
+    assert.are.same(1, state.next_id())
+
+    -- Disk state should be gone
+    assert.is_nil(state.load())
+  end)
 end)

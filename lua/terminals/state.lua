@@ -670,4 +670,17 @@ function M.load()
   return ok and data or nil
 end
 
+function M.clean()
+  -- Clear in-memory state
+  state.projects = {}
+  state.next_terminal_id = 1
+
+  -- Clear on-disk state
+  local dir = get_state_dir()
+  local files = vim.fn.glob(dir .. '/state_*.json', false, true)
+  for _, file in ipairs(files) do
+    os.remove(file)
+  end
+end
+
 return M

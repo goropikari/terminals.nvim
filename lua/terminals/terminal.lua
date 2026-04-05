@@ -1195,7 +1195,6 @@ function M.snapshot_terminal_window(tabpage)
 end
 
 ---@param data table
----@param data table
 ---@param opts? { show?: boolean }
 function M.restore(data, opts)
   opts = opts or {}
@@ -1212,7 +1211,27 @@ function M.restore(data, opts)
   end
 
   local current_tabpages = vim.api.nvim_list_tabpages()
-  local tab_idx = 1
+
+  -- Map current tabpages to their CWD, handling multiple tabs with same CWD
+  local tab_cwd_map = {}
+  for _, tp in ipairs(current_tabpages) do
+    if vim.api.nvim_tabpage_is_valid(tp) then
+      local wins = vim.api.nvim_tabpage_list_wins(tp)
+      for _, winid in ipairs(wins) do
+        if vim.api.nvim_win_is_valid(winid) then
+          local ok, tab_cwd = pcall(vim.fn.getcwd, winid)
+          if ok and tab_cwd then
+            tab_cwd_map[tab_cwd] = tab_cwd_map[tab_cwd] or {}
+            table.insert(tab_cwd_map[tab_cwd], tp)
+            break
+          end
+        end
+      end
+    end
+  end
+
+  -- Keep track of used tabpages to avoid duplicates
+  local used_tabs = {}
 
   -- Sort projects so they are restored in a deterministic order
   local cwds = {}
@@ -1223,87 +1242,100 @@ function M.restore(data, opts)
 
   for _, cwd in ipairs(cwds) do
     local project_data = data.projects[cwd]
-    local tabpage = current_tabpages[tab_idx]
-    tab_idx = tab_idx + 1
-
-    if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-      -- If we have more projects than tabpages, we might skip them or
-      -- just load them into the state for later access
-      tabpage = original_tab
+    -- Find the next available tabpage for this CWD
+    local tabpage = nil
+    if tab_cwd_map[cwd] and #tab_cwd_map[cwd] > 0 then
+      tabpage = table.remove(tab_cwd_map[cwd], 1)
+      used_tabs[tabpage] = true
     end
 
-    -- We need to ensure the tabpage actually switches to the project directory
-    -- if it's supposed to be directory-based.
-    pcall(vim.api.nvim_set_current_tabpage, tabpage)
-    pcall(vim.cmd, 'tcd ' .. vim.fn.fnameescape(cwd))
-
-    -- Initializing project state
-    local project = state.get_tab(tabpage)
-    project.terminals = {}
-    project.active_id = nil
-    project.window_layout = project_data.window_layout
-    project.policy = project_data.policy or project.policy
-
-    -- Re-create terminal buffers
-    local active_id = nil
-    for j, term_info in ipairs(project_data.terminals) do
-      local bufnr = vim.api.nvim_create_buf(false, true)
-      vim.bo[bufnr].buflisted = false
-      vim.bo[bufnr].bufhidden = 'hide'
-      vim.bo[bufnr].filetype = 'terminal'
-      attach_mouse_mappings(bufnr)
-
-      local terminal_id = term_info.id or state.next_id()
-      local job_id = vim.api.nvim_buf_call(bufnr, function()
-        return vim.fn.termopen(shell_for_command(nil, terminal_id, tabpage), {
-          cwd = term_info.cwd,
-          env = {
-            ZELLIJ_SKIP_CHECK_UPDATE = 'true',
-          },
-        })
-      end)
-
-      local terminal = {
-        id = terminal_id,
-        bufnr = bufnr,
-        job_id = job_id,
-        title = term_info.title,
-        cwd = term_info.cwd,
-        alive = true,
-      }
-
-      state.add_terminal(terminal, tabpage)
-      if j == project_data.active_index then
-        active_id = terminal_id
+    if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
+      -- Fallback to original tab if not already used, or find another one
+      if not used_tabs[original_tab] then
+        tabpage = original_tab
+        used_tabs[tabpage] = true
       end
     end
 
-    if active_id then
-      state.set_active(active_id, tabpage)
-    end
+    if tabpage then
+      -- We need to ensure the tabpage actually switches to the project directory
+      -- if it's supposed to be directory-based.
+      pcall(vim.api.nvim_set_current_tabpage, tabpage)
+      pcall(vim.cmd, 'tcd ' .. vim.fn.fnameescape(cwd))
 
-    -- Show if requested or if terminal window already exists
-    local active = state.active(tabpage)
-    if active then
-      local target_win = nil
-      for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
-        if state.is_terminal_window(winid, tabpage) then
-          target_win = winid
-          break
+      -- Initializing project state, cleanup existing ones if any
+      local project = state.get_tab(tabpage)
+      for _, term in ipairs(project.terminals or {}) do
+        if vim.api.nvim_buf_is_valid(term.bufnr) then
+          vim.api.nvim_buf_delete(term.bufnr, { force = true })
+        end
+      end
+      project.terminals = {}
+      project.active_id = nil
+      project.window_layout = project_data.window_layout
+      project.policy = project_data.policy or project.policy
+
+      -- Re-create terminal buffers
+      local active_id = nil
+      for j, term_info in ipairs(project_data.terminals) do
+        local bufnr = vim.api.nvim_create_buf(false, true)
+        vim.bo[bufnr].buflisted = false
+        vim.bo[bufnr].bufhidden = 'hide'
+        vim.bo[bufnr].filetype = 'terminal'
+        attach_mouse_mappings(bufnr)
+
+        local terminal_id = term_info.id or state.next_id()
+        local job_id = vim.api.nvim_buf_call(bufnr, function()
+          return vim.fn.termopen(shell_for_command(nil, terminal_id, tabpage), {
+            cwd = term_info.cwd,
+            env = {
+              ZELLIJ_SKIP_CHECK_UPDATE = 'true',
+            },
+          })
+        end)
+
+        local terminal = {
+          id = terminal_id,
+          bufnr = bufnr,
+          job_id = job_id,
+          title = term_info.title,
+          cwd = term_info.cwd,
+          alive = true,
+        }
+
+        state.add_terminal(terminal, tabpage)
+        if j == project_data.active_index then
+          active_id = terminal_id
         end
       end
 
-      if not target_win and opts.show then
-        target_win = ensure_terminal_window(tabpage)
+      if active_id then
+        state.set_active(active_id, tabpage)
       end
 
-      if target_win then
-        state.add_terminal_window(target_win, tabpage)
-        state.set_window_terminal(target_win, active.id, tabpage)
-        with_terminal_window_unlocked(target_win, function()
-          vim.api.nvim_win_set_buf(target_win, active.bufnr)
-        end)
-        set_terminal_window_locked(target_win, true)
+      -- Show if requested or if terminal window already exists
+      local active = state.active(tabpage)
+      if active then
+        local target_win = nil
+        for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
+          if state.is_terminal_window(winid, tabpage) then
+            target_win = winid
+            break
+          end
+        end
+
+        if not target_win and opts.show then
+          target_win = ensure_terminal_window(tabpage)
+        end
+
+        if target_win then
+          state.add_terminal_window(target_win, tabpage)
+          state.set_window_terminal(target_win, active.id, tabpage)
+          with_terminal_window_unlocked(target_win, function()
+            vim.api.nvim_win_set_buf(target_win, active.bufnr)
+          end)
+          set_terminal_window_locked(target_win, true)
+        end
       end
     end
   end
