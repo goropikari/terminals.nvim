@@ -25,6 +25,9 @@ M.config = {
     tmux = {
       config_path = nil,
     },
+    dtach = {
+      socket_dir = nil,
+    },
   },
   start_in_insert = true,
   terminal_position = 'bottom',

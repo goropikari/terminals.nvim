@@ -514,6 +514,17 @@ local function shell_for_command(cmd, terminal_id, tabpage)
     return string.format('tmux -f %s new-session -A -s %s', config_path, session_name)
   end
 
+  if backend == 'dtach' and terminal_id then
+    local backend_cfg = cfg.backends and cfg.backends.dtach or {}
+    local hash = state.get_cwd_hash()
+    local session_name = string.format('%s_%d', hash, terminal_id)
+    local socket_path = state.dtach_socket_path(backend_cfg.socket_dir, session_name)
+
+    -- Per-tab session with dtach: -A attaches if exists, creates otherwise
+    -- -z flag enables the session to be killed when dtach exits
+    return string.format('dtach -A %s -z %s', socket_path, cfg.shell or vim.o.shell)
+  end
+
   return cfg.shell or vim.o.shell
 end
 

@@ -592,6 +592,17 @@ function M.zellij_config_path(user_path)
   return get_default_zellij_config()
 end
 
+---@param user_dir string?
+---@param session_name string
+---@return string
+function M.dtach_socket_path(user_dir, session_name)
+  local dir = user_dir or get_state_dir()
+  if vim.fn.isdirectory(dir) == 0 then
+    vim.fn.mkdir(dir, 'p')
+  end
+  return string.format('%s/dtach_%s', dir, session_name)
+end
+
 ---@return string
 function M.get_project_name()
   local cwd = vim.fn.getcwd()
