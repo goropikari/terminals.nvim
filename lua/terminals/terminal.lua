@@ -4,6 +4,7 @@ local state = require('terminals.state')
 ---@field auto_close_on_exit boolean
 ---@field focus_terminal_on_open boolean
 ---@field keymaps table<string, table|false>
+---@field commands string[]
 ---@field osc_title boolean
 ---@field shell? string
 ---@field start_in_insert boolean
@@ -505,42 +506,12 @@ local function shell_for_command(cmd, terminal_id, tabpage)
   if backend == 'tmux' and terminal_id then
     local backend_cfg = cfg.backends and cfg.backends.tmux or {}
     local hash = state.get_cwd_hash()
-    local base_session = hash
-    local client_session = string.format('%s_%d', hash, terminal_id)
-    local window_name = tostring(terminal_id)
+    local session_name = string.format('%s_%d', hash, terminal_id)
     local config_path = state.tmux_config_path(backend_cfg.config_path)
 
-    -- Improved robust command for grouped sessions:
-    -- 1. Create base session if missing
-    -- 2. Create window in the group if missing
-    -- 3. Create a unique client session in the same group if missing
-    -- 4. Switch the client session to the specific window
-    -- 5. Attach to the unique client session
-    return string.format(
-      'sh -c "tmux -f %s has-session -t %s 2>/dev/null || tmux -f %s new-session -d -s %s -n %s; '
-        .. 'tmux -f %s new-window -t %s -n %s 2>/dev/null; '
-        .. 'tmux -f %s has-session -t %s 2>/dev/null || tmux -f %s new-session -d -t %s -s %s; '
-        .. 'tmux -f %s select-window -t %s:%s; '
-        .. 'tmux -f %s attach-session -t %s"',
-      config_path,
-      base_session,
-      config_path,
-      base_session,
-      window_name,
-      config_path,
-      base_session,
-      window_name,
-      config_path,
-      client_session,
-      config_path,
-      base_session,
-      client_session,
-      config_path,
-      client_session,
-      window_name,
-      config_path,
-      client_session
-    )
+    -- Per-tab session: Each terminal gets its own independent tmux session
+    -- -A: attach if session exists, otherwise create it
+    return string.format('tmux -f %s new-session -A -s %s', config_path, session_name)
   end
 
   return cfg.shell or vim.o.shell

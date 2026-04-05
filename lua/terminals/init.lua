@@ -13,6 +13,7 @@ M.config = {
     prev = { lhs = '<A-h>', modes = { 'n', 't' } },
     toggle = { lhs = '<C-t>', modes = { 'n', 't' } },
   },
+  commands = {},
   osc_title = true,
   shell = nil,
   auto_restore = true,
@@ -57,146 +58,180 @@ local function is_wheel_down(button)
 end
 
 local function setup_commands()
-  vim.api.nvim_create_user_command('TerminalNew', function(opts)
-    require('terminals.terminal').create({ cmd = opts.args ~= '' and opts.args or nil })
-  end, { nargs = '*' })
+  local commands = M.config.commands
+  -- If commands table is empty, no commands are registered
+  if not commands or type(commands) ~= 'table' or #commands == 0 then
+    return
+  end
 
-  vim.api.nvim_create_user_command('TerminalOpen', function()
-    local active = require('terminals.terminal').active_id()
-    if active then
-      require('terminals.terminal').show(active)
-    else
-      require('terminals.terminal').create()
-    end
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalToggle', function()
-    require('terminals.terminal').toggle()
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalCloseWindow', function()
-    require('terminals.terminal').close_window()
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalSplit', function()
-    require('terminals.terminal').open_split()
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalVSplit', function()
-    require('terminals.terminal').open_split({ vertical = true })
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalSetPosition', function(opts)
-    require('terminals').set_tab_policy({
-      terminal_position = opts.args,
-    })
-  end, {
-    nargs = 1,
-    complete = function()
-      return { 'bottom', 'top', 'left', 'right', 'float' }
+  local command_registry = {
+    TerminalNew = function()
+      vim.api.nvim_create_user_command('TerminalNew', function(opts)
+        require('terminals.terminal').create({ cmd = opts.args ~= '' and opts.args or nil })
+      end, { nargs = '*' })
     end,
-  })
-
-  vim.api.nvim_create_user_command('TerminalNext', function()
-    require('terminals.terminal').cycle(1)
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalPrev', function()
-    require('terminals.terminal').cycle(-1)
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalClose', function()
-    local active = require('terminals.terminal').active_id()
-    if active then
-      require('terminals.terminal').close(active)
-    end
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalPicker', function(opts)
-    local backend = opts.args ~= '' and opts.args or nil
-    require('terminals.terminal').pick({ backend = backend })
-  end, {
-    nargs = '?',
-    complete = function()
-      return { 'ui_select', 'telescope' }
-    end,
-  })
-
-  vim.api.nvim_create_user_command('TerminalRename', function(opts)
-    local active = require('terminals.terminal').active_id()
-    if active and opts.args ~= '' then
-      require('terminals.terminal').rename(active, opts.args)
-    end
-  end, { nargs = 1 })
-
-  vim.api.nvim_create_user_command('TerminalMoveLeft', function()
-    local terminal = require('terminals.terminal').current_or_active()
-    if terminal then
-      require('terminals.state').move_left(terminal.id)
-      require('terminals.ui.winbar').refresh_all()
-    end
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalMoveRight', function()
-    local terminal = require('terminals.terminal').current_or_active()
-    if terminal then
-      require('terminals.state').move_right(terminal.id)
-      require('terminals.ui.winbar').refresh_all()
-    end
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalSendLine', function()
-    require('terminals.terminal').send_current_line()
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalSendSelection', function(opts)
-    local terminal = require('terminals.terminal')
-    local start_pos = vim.fn.getpos("'<")
-    local end_pos = vim.fn.getpos("'>")
-    local start_row = start_pos[2]
-    local end_row = end_pos[2]
-
-    if start_row > 0 and end_row > 0 and start_row == opts.line1 and end_row == opts.line2 then
-      terminal.send_visual_selection()
-      return
-    end
-
-    terminal.send_range(opts.line1, opts.line2)
-  end, { range = true })
-
-  vim.api.nvim_create_user_command('TerminalSave', function()
-    require('terminals.state').save()
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalRestore', function()
-    local data = require('terminals.state').load()
-    if data then
-      M._did_restore = true
-      require('terminals.terminal').restore(data, { show = true })
-    end
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalClean', function()
-    require('terminals.state').clean()
-    vim.notify('Terminals.nvim: Session data cleared.', vim.log.levels.INFO)
-  end, {})
-
-  vim.api.nvim_create_user_command('TerminalCleanAll', function()
-    local state = require('terminals.state')
-    state.clean()
-    -- Also remove the state directory itself to ensure all project states are cleared
-    local data_path = vim.fn.stdpath('data')
-    local dir = string.format('%s/terminals.nvim', data_path)
-    if vim.fn.isdirectory(dir) == 1 then
-      local files = vim.fn.glob(dir .. '/*', false, true)
-      for _, file in ipairs(files) do
-        if file:match('%.json$') then
-          os.remove(file)
+    TerminalOpen = function()
+      vim.api.nvim_create_user_command('TerminalOpen', function()
+        local active = require('terminals.terminal').active_id()
+        if active then
+          require('terminals.terminal').show(active)
+        else
+          require('terminals.terminal').create()
         end
-      end
+      end, {})
+    end,
+    TerminalToggle = function()
+      vim.api.nvim_create_user_command('TerminalToggle', function()
+        require('terminals.terminal').toggle()
+      end, {})
+    end,
+    TerminalCloseWindow = function()
+      vim.api.nvim_create_user_command('TerminalCloseWindow', function()
+        require('terminals.terminal').close_window()
+      end, {})
+    end,
+    TerminalSplit = function()
+      vim.api.nvim_create_user_command('TerminalSplit', function()
+        require('terminals.terminal').open_split()
+      end, {})
+    end,
+    TerminalVSplit = function()
+      vim.api.nvim_create_user_command('TerminalVSplit', function()
+        require('terminals.terminal').open_split({ vertical = true })
+      end, {})
+    end,
+    TerminalSetPosition = function()
+      vim.api.nvim_create_user_command('TerminalSetPosition', function(opts)
+        require('terminals').set_tab_policy({
+          terminal_position = opts.args,
+        })
+      end, {
+        nargs = 1,
+        complete = function()
+          return { 'bottom', 'top', 'left', 'right', 'float' }
+        end,
+      })
+    end,
+    TerminalNext = function()
+      vim.api.nvim_create_user_command('TerminalNext', function()
+        require('terminals.terminal').cycle(1)
+      end, {})
+    end,
+    TerminalPrev = function()
+      vim.api.nvim_create_user_command('TerminalPrev', function()
+        require('terminals.terminal').cycle(-1)
+      end, {})
+    end,
+    TerminalClose = function()
+      vim.api.nvim_create_user_command('TerminalClose', function()
+        local active = require('terminals.terminal').active_id()
+        if active then
+          require('terminals.terminal').close(active)
+        end
+      end, {})
+    end,
+    TerminalPicker = function()
+      vim.api.nvim_create_user_command('TerminalPicker', function(opts)
+        local backend = opts.args ~= '' and opts.args or nil
+        require('terminals.terminal').pick({ backend = backend })
+      end, {
+        nargs = '?',
+        complete = function()
+          return { 'ui_select', 'telescope' }
+        end,
+      })
+    end,
+    TerminalRename = function()
+      vim.api.nvim_create_user_command('TerminalRename', function(opts)
+        local active = require('terminals.terminal').active_id()
+        if active and opts.args ~= '' then
+          require('terminals.terminal').rename(active, opts.args)
+        end
+      end, { nargs = 1 })
+    end,
+    TerminalMoveLeft = function()
+      vim.api.nvim_create_user_command('TerminalMoveLeft', function()
+        local terminal = require('terminals.terminal').current_or_active()
+        if terminal then
+          require('terminals.state').move_left(terminal.id)
+          require('terminals.ui.winbar').refresh_all()
+        end
+      end, {})
+    end,
+    TerminalMoveRight = function()
+      vim.api.nvim_create_user_command('TerminalMoveRight', function()
+        local terminal = require('terminals.terminal').current_or_active()
+        if terminal then
+          require('terminals.state').move_right(terminal.id)
+          require('terminals.ui.winbar').refresh_all()
+        end
+      end, {})
+    end,
+    TerminalSendLine = function()
+      vim.api.nvim_create_user_command('TerminalSendLine', function()
+        require('terminals.terminal').send_current_line()
+      end, {})
+    end,
+    TerminalSendSelection = function()
+      vim.api.nvim_create_user_command('TerminalSendSelection', function(opts)
+        local terminal = require('terminals.terminal')
+        local start_pos = vim.fn.getpos("'<")
+        local end_pos = vim.fn.getpos("'>")
+        local start_row = start_pos[2]
+        local end_row = end_pos[2]
+
+        if start_row > 0 and end_row > 0 and start_row == opts.line1 and end_row == opts.line2 then
+          terminal.send_visual_selection()
+          return
+        end
+
+        terminal.send_range(opts.line1, opts.line2)
+      end, { range = true })
+    end,
+    TerminalSave = function()
+      vim.api.nvim_create_user_command('TerminalSave', function()
+        require('terminals.state').save()
+      end, {})
+    end,
+    TerminalRestore = function()
+      vim.api.nvim_create_user_command('TerminalRestore', function()
+        local data = require('terminals.state').load()
+        if data then
+          M._did_restore = true
+          require('terminals.terminal').restore(data, { show = true })
+        end
+      end, {})
+    end,
+    TerminalClean = function()
+      vim.api.nvim_create_user_command('TerminalClean', function()
+        require('terminals.state').clean()
+        vim.notify('Terminals.nvim: Session data cleared.', vim.log.levels.INFO)
+      end, {})
+    end,
+    TerminalCleanAll = function()
+      vim.api.nvim_create_user_command('TerminalCleanAll', function()
+        local state = require('terminals.state')
+        state.clean()
+        local data_path = vim.fn.stdpath('data')
+        local dir = string.format('%s/terminals.nvim', data_path)
+        if vim.fn.isdirectory(dir) == 1 then
+          local files = vim.fn.glob(dir .. '/*', false, true)
+          for _, file in ipairs(files) do
+            if file:match('%.json$') then
+              os.remove(file)
+            end
+          end
+        end
+        vim.notify('Terminals.nvim: All session data cleared.', vim.log.levels.INFO)
+      end, {})
+    end,
+  }
+
+  for _, command_name in ipairs(commands) do
+    if command_registry[command_name] then
+      command_registry[command_name]()
     end
-    vim.notify('Terminals.nvim: All session data cleared.', vim.log.levels.INFO)
-  end, {})
+  end
 end
 
 -- Autocommands

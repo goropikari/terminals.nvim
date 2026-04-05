@@ -61,6 +61,7 @@ make clean
 ### Configuration
 
 Main config in `init.lua`:
+
 - `keymaps`: close, move_left, move_right, new, next, prev, toggle
 - `terminal_position`: bottom, top, left, right, float
 - `float`: width, height, border, row, col

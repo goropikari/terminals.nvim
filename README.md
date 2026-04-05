@@ -117,52 +117,52 @@ require("terminals").setup({
 
 ### Create / Open / Toggle
 
-| Command | Lua |
-|---------|-----|
-| `:TerminalNew [cmd]` | `require("terminals.terminal").create({ cmd = "cmd", title = "title" })` |
-| `:TerminalOpen` | `require("terminals.terminal").show(id)` |
-| `:TerminalToggle` | `require("terminals.terminal").toggle()` |
-| `:TerminalClose` | `require("terminals.terminal").close(id)` |
-| `:TerminalCloseWindow` | `require("terminals").clear_tab_policy()` |
-| `:TerminalSplit` | `require("terminals").set_tab_policy({ terminal_position = "bottom" })` |
-| `:TerminalVSplit` | `require("terminals").set_tab_policy({ terminal_position = "left" })` |
+| Command                | Lua                                                                      |
+| ---------------------- | ------------------------------------------------------------------------ |
+| `:TerminalNew [cmd]`   | `require("terminals.terminal").create({ cmd = "cmd", title = "title" })` |
+| `:TerminalOpen`        | `require("terminals.terminal").show(id)`                                 |
+| `:TerminalToggle`      | `require("terminals.terminal").toggle()`                                 |
+| `:TerminalClose`       | `require("terminals.terminal").close(id)`                                |
+| `:TerminalCloseWindow` | `require("terminals").clear_tab_policy()`                                |
+| `:TerminalSplit`       | `require("terminals").set_tab_policy({ terminal_position = "bottom" })`  |
+| `:TerminalVSplit`      | `require("terminals").set_tab_policy({ terminal_position = "left" })`    |
 
 ### Session Persistence
 
-| Command | Lua |
-|---------|-----|
-| `:TerminalSave` | `require("terminals.state").save()` |
-| `:TerminalRestore` | `require("terminals.terminal").restore(data, { show = true })` |
-| `:TerminalClean` | `require("terminals.state").clean()` |
-| `:TerminalCleanAll` | `require("terminals.state").clean_all()` |
+| Command             | Lua                                                            |
+| ------------------- | -------------------------------------------------------------- |
+| `:TerminalSave`     | `require("terminals.state").save()`                            |
+| `:TerminalRestore`  | `require("terminals.terminal").restore(data, { show = true })` |
+| `:TerminalClean`    | `require("terminals.state").clean()`                           |
+| `:TerminalCleanAll` | `require("terminals.state").clean_all()`                       |
 
 ### Navigation
 
-| Command | Lua |
-|---------|-----|
-| `:TerminalNext` | `require("terminals.terminal").cycle(1)` |
-| `:TerminalPrev` | `require("terminals.terminal").cycle(-1)` |
-| `:TerminalMoveLeft` | `require("terminals.state").move_left(id)` |
+| Command              | Lua                                         |
+| -------------------- | ------------------------------------------- |
+| `:TerminalNext`      | `require("terminals.terminal").cycle(1)`    |
+| `:TerminalPrev`      | `require("terminals.terminal").cycle(-1)`   |
+| `:TerminalMoveLeft`  | `require("terminals.state").move_left(id)`  |
 | `:TerminalMoveRight` | `require("terminals.state").move_right(id)` |
 
 ### Terminal Picker
 
-| Command | Lua |
-|---------|-----|
+| Command                                  | Lua                                                             |
+| ---------------------------------------- | --------------------------------------------------------------- |
 | `:TerminalPicker [ui_select\|telescope]` | `require("terminals.terminal").pick({ backend = "telescope" })` |
 
 ### Terminal Operations
 
-| Command | Lua |
-|---------|-----|
-| `:TerminalRename {title}` | `require("terminals.terminal").rename(id, "title")` |
-| `:TerminalSendLine` | `require("terminals.terminal").send_current_line()` |
-| `:TerminalSendSelection` | `require("terminals.terminal").send_visual_selection()` |
+| Command                   | Lua                                                     |
+| ------------------------- | ------------------------------------------------------- |
+| `:TerminalRename {title}` | `require("terminals.terminal").rename(id, "title")`     |
+| `:TerminalSendLine`       | `require("terminals.terminal").send_current_line()`     |
+| `:TerminalSendSelection`  | `require("terminals.terminal").send_visual_selection()` |
 
 ### Window Configuration
 
-| Command | Lua |
-|---------|-----|
+| Command                                                  | Lua                                                                                     |
+| -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `:TerminalSetPosition {bottom\|top\|left\|right\|float}` | `require("terminals").set_tab_policy({ terminal_position = "float", float = { ... } })` |
 
 ### Setup
