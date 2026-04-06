@@ -60,12 +60,51 @@ local function is_wheel_down(button)
   return button == 'd' or button == 'wd' or button == 'wheeldown' or button == 'down'
 end
 
+-- Command handler implementations (shared with keymaps)
+local function cmd_handlers()
+  return {
+    close = function()
+      local active = require('terminals.terminal').active_id()
+      if active then
+        require('terminals.terminal').close(active)
+      end
+    end,
+    move_left = function()
+      local terminal = require('terminals.terminal').current_or_active()
+      if terminal then
+        require('terminals.state').move_left(terminal.id)
+        require('terminals.ui.winbar').refresh_all()
+      end
+    end,
+    move_right = function()
+      local terminal = require('terminals.terminal').current_or_active()
+      if terminal then
+        require('terminals.state').move_right(terminal.id)
+        require('terminals.ui.winbar').refresh_all()
+      end
+    end,
+    new = function()
+      require('terminals.terminal').create()
+    end,
+    next = function()
+      require('terminals.terminal').cycle(1)
+    end,
+    prev = function()
+      require('terminals.terminal').cycle(-1)
+    end,
+    toggle = function()
+      require('terminals.terminal').toggle()
+    end,
+  }
+end
+
 local function setup_commands()
   local commands = M.config.commands
-  -- If commands table is empty, no commands are registered
   if not commands or type(commands) ~= 'table' or #commands == 0 then
     return
   end
+
+  local h = cmd_handlers()
 
   local command_registry = {
     TerminalNew = function()
@@ -84,9 +123,7 @@ local function setup_commands()
       end, {})
     end,
     TerminalToggle = function()
-      vim.api.nvim_create_user_command('TerminalToggle', function()
-        require('terminals.terminal').toggle()
-      end, {})
+      vim.api.nvim_create_user_command('TerminalToggle', h.toggle, {})
     end,
     TerminalCloseWindow = function()
       vim.api.nvim_create_user_command('TerminalCloseWindow', function()
@@ -116,14 +153,10 @@ local function setup_commands()
       })
     end,
     TerminalNext = function()
-      vim.api.nvim_create_user_command('TerminalNext', function()
-        require('terminals.terminal').cycle(1)
-      end, {})
+      vim.api.nvim_create_user_command('TerminalNext', h.next, {})
     end,
     TerminalPrev = function()
-      vim.api.nvim_create_user_command('TerminalPrev', function()
-        require('terminals.terminal').cycle(-1)
-      end, {})
+      vim.api.nvim_create_user_command('TerminalPrev', h.prev, {})
     end,
     TerminalClose = function()
       vim.api.nvim_create_user_command('TerminalClose', function()
@@ -153,22 +186,10 @@ local function setup_commands()
       end, { nargs = 1 })
     end,
     TerminalMoveLeft = function()
-      vim.api.nvim_create_user_command('TerminalMoveLeft', function()
-        local terminal = require('terminals.terminal').current_or_active()
-        if terminal then
-          require('terminals.state').move_left(terminal.id)
-          require('terminals.ui.winbar').refresh_all()
-        end
-      end, {})
+      vim.api.nvim_create_user_command('TerminalMoveLeft', h.move_left, {})
     end,
     TerminalMoveRight = function()
-      vim.api.nvim_create_user_command('TerminalMoveRight', function()
-        local terminal = require('terminals.terminal').current_or_active()
-        if terminal then
-          require('terminals.state').move_right(terminal.id)
-          require('terminals.ui.winbar').refresh_all()
-        end
-      end, {})
+      vim.api.nvim_create_user_command('TerminalMoveRight', h.move_right, {})
     end,
     TerminalSendLine = function()
       vim.api.nvim_create_user_command('TerminalSendLine', function()
@@ -255,46 +276,8 @@ local function reopen_tab_terminal_window(tabpage)
   end
 end
 
----@return table<string, fun()>
-local function command_handlers()
-  return {
-    close = function()
-      local active = require('terminals.terminal').active_id()
-      if active then
-        require('terminals.terminal').close(active)
-      end
-    end,
-    move_left = function()
-      local terminal = require('terminals.terminal').current_or_active()
-      if terminal then
-        require('terminals.state').move_left(terminal.id)
-        require('terminals.ui.winbar').refresh_all()
-      end
-    end,
-    move_right = function()
-      local terminal = require('terminals.terminal').current_or_active()
-      if terminal then
-        require('terminals.state').move_right(terminal.id)
-        require('terminals.ui.winbar').refresh_all()
-      end
-    end,
-    new = function()
-      require('terminals.terminal').create()
-    end,
-    next = function()
-      require('terminals.terminal').cycle(1)
-    end,
-    prev = function()
-      require('terminals.terminal').cycle(-1)
-    end,
-    toggle = function()
-      require('terminals.terminal').toggle()
-    end,
-  }
-end
-
 local function setup_keymaps()
-  local handlers = command_handlers()
+  local handlers = cmd_handlers()
 
   for name, spec in pairs(M.config.keymaps or {}) do
     if spec and spec.lhs and handlers[name] then

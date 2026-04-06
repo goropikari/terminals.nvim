@@ -44,6 +44,7 @@ local title_sync_timer = nil
 ---@param tabpage? integer
 ---@return TerminalsConfig
 local function config(tabpage)
+  tabpage = tabpage or state.current_tabpage()
   return vim.tbl_deep_extend('force', {}, require('terminals').config, state.tab_policy(tabpage))
 end
 
@@ -1105,11 +1106,12 @@ function M.cleanup_for_quit()
 end
 
 function M.sync_current_buffer()
+  local tabpage = state.current_tabpage()
   local bufnr = vim.api.nvim_get_current_buf()
-  local terminal = state.find_terminal_by_bufnr(bufnr, state.current_tabpage())
+  local terminal = state.find_terminal_by_bufnr(bufnr, tabpage)
   if terminal then
-    if state.is_terminal_window(current_window(), state.current_tabpage()) then
-      state.set_window_terminal(current_window(), terminal.id, state.current_tabpage())
+    if state.is_terminal_window(current_window(), tabpage) then
+      state.set_window_terminal(current_window(), terminal.id, tabpage)
     end
     state.set_active(terminal.id)
   end
