@@ -378,13 +378,7 @@ local function setup_autocmds()
   vim.api.nvim_create_autocmd('WinResized', {
     group = group,
     callback = function()
-      local terminal = require('terminals.terminal')
-      local state = require('terminals.state')
-      for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
-        if state.terminal_window(tabpage) then
-          terminal.snapshot_terminal_window(tabpage)
-        end
-      end
+      require('terminals.ui.winbar').refresh_all()
     end,
   })
 
@@ -580,7 +574,6 @@ end
 ---@param tabpage? integer
 function M.set_tab_policy(policy, tabpage)
   tabpage = tabpage or require('terminals.state').current_tabpage()
-  require('terminals.terminal').snapshot_terminal_window(tabpage)
   require('terminals.state').set_tab_policy(policy, tabpage)
   reopen_tab_terminal_window(tabpage)
   require('terminals.ui.winbar').refresh_all()
@@ -590,7 +583,6 @@ end
 ---@param tabpage? integer
 function M.replace_tab_policy(policy, tabpage)
   tabpage = tabpage or require('terminals.state').current_tabpage()
-  require('terminals.terminal').snapshot_terminal_window(tabpage)
   require('terminals.state').replace_tab_policy(policy, tabpage)
   reopen_tab_terminal_window(tabpage)
   require('terminals.ui.winbar').refresh_all()
@@ -599,7 +591,6 @@ end
 ---@param tabpage? integer
 function M.clear_tab_policy(tabpage)
   tabpage = tabpage or require('terminals.state').current_tabpage()
-  require('terminals.terminal').snapshot_terminal_window(tabpage)
   require('terminals.state').clear_tab_policy(tabpage)
   reopen_tab_terminal_window(tabpage)
   require('terminals.ui.winbar').refresh_all()

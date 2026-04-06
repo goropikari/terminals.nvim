@@ -1161,13 +1161,6 @@ function M.prune_invalid_buffers()
   end
 end
 
----@param tabpage? integer
----@return TerminalsWindowLayout?
-function M.snapshot_terminal_window(tabpage)
-  tabpage = tabpage or state.current_tabpage()
-  return snapshot_window_layout(terminal_window(tabpage), tabpage)
-end
-
 ---@param data table
 ---@param opts? { show?: boolean }
 function M.restore(data, opts)
