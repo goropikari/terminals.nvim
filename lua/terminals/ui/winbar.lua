@@ -20,14 +20,19 @@ end
 
 ---@param terminal TerminalsTerminal
 ---@param active boolean
----@param dragging boolean?
+---@param highlight string?
 ---@return string
-local function render_label(terminal, active, dragging)
+local function render_label(terminal, active, highlight)
   local hl = active and '%#TerminalsWinbarActive#' or '%#TerminalsWinbarInactive#'
-  if dragging then
-    hl = '%#TerminalsWinbarDrag#'
+  if highlight then
+    hl = highlight
   end
   return string.format('%s %s ', hl, sanitize_label_text(terminal.title))
+end
+
+---@return string
+local function render_drop_marker()
+  return '%#TerminalsWinbarFill# %#TerminalsWinbarDrag#▏%#TerminalsWinbarFill# '
 end
 
 ---@param tabpage integer
@@ -52,8 +57,18 @@ local function current_layout()
 
   for index, terminal in ipairs(tabs_for_current_tabpage(tabpage)) do
     local is_active = active and active.id == terminal.id
-    local dragging = drag and drag.source_id == terminal.id
-    local label = render_label(terminal, is_active, dragging)
+    if drag and drag.active and drag.target_index == index then
+      col = col + vim.fn.strdisplaywidth(render_drop_marker():gsub('%%#.-#', ''))
+    end
+
+    local hl = nil
+    if drag and drag.active and drag.source_id == terminal.id then
+      hl = '%#TerminalsWinbarDrag#'
+    elseif drag and drag.active and drag.target_index == index + 1 then
+      hl = '%#TerminalsWinbarDrag#'
+    end
+
+    local label = render_label(terminal, is_active, hl)
     local width = vim.fn.strdisplaywidth(label:gsub('%%#.-#', ''))
     entries[#entries + 1] = {
       id = terminal.id,
@@ -62,6 +77,10 @@ local function current_layout()
       end_col = col + width - 1,
     }
     col = col + width
+  end
+
+  if drag and drag.active and drag.target_index == (#tabs_for_current_tabpage(tabpage) + 1) then
+    col = col + vim.fn.strdisplaywidth(render_drop_marker():gsub('%%#.-#', ''))
   end
 
   M.layouts[winid] = entries
@@ -76,9 +95,24 @@ local function render_tabs()
   local active = state.window_terminal(winid, tabpage)
   local drag = state.drag(tabpage)
 
-  for _, terminal in ipairs(tabs_for_current_tabpage(tabpage)) do
-    local label = render_label(terminal, active and active.id == terminal.id, drag and drag.source_id == terminal.id)
+  for index, terminal in ipairs(tabs_for_current_tabpage(tabpage)) do
+    if drag and drag.active and drag.target_index == index then
+      chunks[#chunks + 1] = render_drop_marker()
+    end
+
+    local hl = nil
+    if drag and drag.active and drag.source_id == terminal.id then
+      hl = '%#TerminalsWinbarDrag#'
+    elseif drag and drag.active and drag.target_index == index + 1 then
+      hl = '%#TerminalsWinbarDrag#'
+    end
+
+    local label = render_label(terminal, active and active.id == terminal.id, hl)
     chunks[#chunks + 1] = string.format('%%%d@v:lua.TerminalsWinbarClick@%s%%X', terminal.id, label)
+  end
+
+  if drag and drag.active and drag.target_index == (#tabs_for_current_tabpage(tabpage) + 1) then
+    chunks[#chunks + 1] = render_drop_marker()
   end
 
   return table.concat(chunks, '')
@@ -116,6 +150,9 @@ function M.target_index_for_position(winid, col)
   end
 
   for _, entry in ipairs(layout) do
+    if col < entry.start_col then
+      return entry.index
+    end
     if col >= entry.start_col and col <= entry.end_col then
       local midpoint = math.floor((entry.start_col + entry.end_col) / 2)
       if col <= midpoint then

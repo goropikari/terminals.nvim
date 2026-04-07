@@ -685,6 +685,81 @@ describe('terminals.nvim', function()
     assert.is_truthy(rendered:find('OSC %% title', 1, true))
   end)
 
+  it('treats a plain winbar click as selection, not a reorder drag', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+    local winbar = require('terminals.ui.winbar')
+
+    local ids = create_titles('one', 'two', 'three')
+    terminal.show(ids[1])
+    local winid = state.terminal_window()
+    winbar.render()
+    local source = winbar.layout_for_win(winid)[1]
+
+    local mouse = {
+      winid = winid,
+      wincol = source.start_col + 1,
+      screenrow = 1,
+      screencol = source.start_col + 1,
+    }
+    getmousepos_stub = stub(vim.fn, 'getmousepos')
+    getmousepos_stub.invokes(function()
+      return mouse
+    end)
+
+    _G.TerminalsWinbarClick(ids[1], nil, 'l', nil)
+    require('terminals.ui.drag').finish()
+
+    assert.are.same({ 'one', 'two', 'three' }, titles())
+    assert.are.same('one', state.active().title)
+  end)
+
+  it('shows a drop indicator and reorders only after a real drag threshold is crossed', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+    local drag = require('terminals.ui.drag')
+    local winbar = require('terminals.ui.winbar')
+
+    local ids = create_titles('one', 'two', 'three')
+    terminal.show(ids[1])
+    local winid = state.terminal_window()
+    winbar.render()
+    local layout = winbar.layout_for_win(winid)
+
+    local mouse = {
+      winid = winid,
+      wincol = layout[1].start_col + 1,
+      screenrow = 1,
+      screencol = layout[1].start_col + 1,
+    }
+    getmousepos_stub = stub(vim.fn, 'getmousepos')
+    getmousepos_stub.invokes(function()
+      return mouse
+    end)
+
+    _G.TerminalsWinbarClick(ids[1], nil, 'l', nil)
+
+    mouse.wincol = layout[1].start_col + 2
+    mouse.screencol = layout[1].start_col + 2
+    drag.update()
+    assert.are.same(nil, state.drag() and state.drag().target_index or nil)
+    assert.is_nil(drag.ghost_window())
+
+    mouse.wincol = layout[2].end_col
+    mouse.screencol = layout[2].end_col
+    drag.update()
+
+    local rendered = winbar.render()
+    assert.is_truthy(rendered:find('▏', 1, true))
+    assert.are.same(3, state.drag().target_index)
+    assert.is_true(vim.api.nvim_win_is_valid(drag.ghost_window()))
+
+    drag.finish()
+
+    assert.are.same({ 'two', 'one', 'three' }, titles())
+    assert.is_nil(drag.ghost_window())
+  end)
+
   it('opens a picker with vim.ui.select and switches to the selected terminal', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')

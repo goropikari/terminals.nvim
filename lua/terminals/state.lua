@@ -7,7 +7,9 @@
 
 ---@class TerminalsDragState
 ---@field source_id integer
+---@field active boolean
 ---@field target_index? integer
+---@field start_mouse? { row?: integer, col?: integer }
 
 ---@class TerminalsTerminal
 ---@field id integer
@@ -484,20 +486,34 @@ function M.move_right(id, tabpage)
 end
 
 ---@param source_id integer
+---@param start_mouse? { row?: integer, col?: integer }
 ---@param tabpage? integer
-function M.start_drag(source_id, tabpage)
+function M.start_drag(source_id, start_mouse, tabpage)
   local tab = M.get_tab(tabpage)
   tab.drag = {
     source_id = source_id,
+    active = false,
     target_index = nil,
+    start_mouse = start_mouse and vim.deepcopy(start_mouse) or nil,
   }
+end
+
+---@param tabpage? integer
+---@return boolean
+function M.activate_drag(tabpage)
+  local drag = M.drag(tabpage)
+  if not drag or drag.active then
+    return false
+  end
+  drag.active = true
+  return true
 end
 
 ---@param target_index integer
 ---@param tabpage? integer
 function M.update_drag(target_index, tabpage)
   local tab = M.get_tab(tabpage)
-  if not tab.drag then
+  if not tab.drag or not tab.drag.active then
     return
   end
   tab.drag.target_index = target_index
@@ -515,7 +531,7 @@ function M.finish_drag(tabpage)
   local tab = M.get_tab(tabpage)
   local drag = tab.drag
   tab.drag = nil
-  if not drag or not drag.target_index then
+  if not drag or not drag.active or not drag.target_index then
     return false
   end
   return M.move_terminal(drag.source_id, drag.target_index, tabpage)
