@@ -1,4 +1,4 @@
-local command_names = {
+local all_commands = {
   'TerminalNew',
   'TerminalOpen',
   'TerminalToggle',
@@ -46,7 +46,7 @@ local function clear_modules()
 end
 
 local function clear_commands()
-  for _, name in ipairs(command_names) do
+  for _, name in ipairs(all_commands) do
     pcall(vim.api.nvim_del_user_command, name)
   end
 end
@@ -80,25 +80,6 @@ local function reset_editor()
 
   pcall(vim.cmd, 'new')
 end
-
-local all_commands = {
-  'TerminalNew',
-  'TerminalOpen',
-  'TerminalToggle',
-  'TerminalCloseWindow',
-  'TerminalSplit',
-  'TerminalVSplit',
-  'TerminalSetPosition',
-  'TerminalNext',
-  'TerminalPrev',
-  'TerminalClose',
-  'TerminalPicker',
-  'TerminalRename',
-  'TerminalMoveLeft',
-  'TerminalMoveRight',
-  'TerminalSendLine',
-  'TerminalSendSelection',
-}
 
 local function setup(opts)
   reset_editor()

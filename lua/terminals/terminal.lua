@@ -84,19 +84,11 @@ local function attach_mouse_mappings(bufnr)
   local opts = { buffer = bufnr, silent = true }
   local wheel_opts = { buffer = bufnr, expr = true, remap = true, silent = true }
 
-  vim.keymap.set('n', '<LeftDrag>', function()
+  vim.keymap.set({ 'n', 't' }, '<LeftDrag>', function()
     require('terminals.ui.drag').update()
   end, opts)
 
-  vim.keymap.set('n', '<LeftRelease>', function()
-    require('terminals.ui.drag').finish()
-  end, opts)
-
-  vim.keymap.set('t', '<LeftDrag>', function()
-    require('terminals.ui.drag').update()
-  end, opts)
-
-  vim.keymap.set('t', '<LeftRelease>', function()
+  vim.keymap.set({ 'n', 't' }, '<LeftRelease>', function()
     require('terminals.ui.drag').finish()
   end, opts)
 

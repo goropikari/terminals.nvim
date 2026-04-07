@@ -48,11 +48,12 @@ local function current_layout()
   local entries = {}
   local col = 1
   local drag = state.drag(tabpage)
+  local active = state.window_terminal(winid, tabpage)
 
   for index, terminal in ipairs(tabs_for_current_tabpage(tabpage)) do
-    local active = state.window_terminal(winid, tabpage) and state.window_terminal(winid, tabpage).id == terminal.id
+    local is_active = active and active.id == terminal.id
     local dragging = drag and drag.source_id == terminal.id
-    local label = render_label(terminal, active, dragging)
+    local label = render_label(terminal, is_active, dragging)
     local width = vim.fn.strdisplaywidth(label:gsub('%%#.-#', ''))
     entries[#entries + 1] = {
       id = terminal.id,

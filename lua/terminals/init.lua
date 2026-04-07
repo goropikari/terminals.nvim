@@ -146,12 +146,7 @@ local function setup_commands()
       vim.api.nvim_create_user_command('TerminalPrev', h.prev, {})
     end,
     TerminalClose = function()
-      vim.api.nvim_create_user_command('TerminalClose', function()
-        local active = require('terminals.terminal').active_id()
-        if active then
-          require('terminals.terminal').close(active)
-        end
-      end, {})
+      vim.api.nvim_create_user_command('TerminalClose', h.close, {})
     end,
     TerminalPicker = function()
       vim.api.nvim_create_user_command('TerminalPicker', function(opts)
