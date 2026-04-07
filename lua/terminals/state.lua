@@ -40,6 +40,17 @@ local state = {
   next_terminal_id = 1,
 }
 
+local project_root_cache = {}
+
+---@param path string
+---@return string
+local function normalize_path(path)
+  local uv = vim.uv or vim.loop
+  local resolved = uv.fs_realpath(path)
+  path = resolved or vim.fn.fnamemodify(path, ':p')
+  return path:gsub('/+$', '')
+end
+
 ---@param tabpage? integer
 ---@return string
 function M.get_tab_cwd(tabpage)
@@ -60,7 +71,31 @@ function M.get_tab_cwd(tabpage)
   if not ok then
     cwd = vim.fn.getcwd()
   end
-  return cwd
+  return normalize_path(cwd)
+end
+
+---@param cwd string
+---@return string
+function M.get_project_root(cwd)
+  cwd = normalize_path(cwd)
+  if project_root_cache[cwd] then
+    return project_root_cache[cwd]
+  end
+
+  local root = cwd
+  local ok, output = pcall(vim.fn.systemlist, { 'git', '-C', cwd, 'rev-parse', '--show-toplevel' })
+  if ok and vim.v.shell_error == 0 and type(output) == 'table' and output[1] and output[1] ~= '' then
+    root = normalize_path(output[1])
+  end
+
+  project_root_cache[cwd] = root
+  return root
+end
+
+---@param tabpage? integer
+---@return string
+function M.get_tab_project(tabpage)
+  return M.get_project_root(M.get_tab_cwd(tabpage))
 end
 
 function M.prune()
@@ -75,8 +110,8 @@ end
 ---@param tabpage? integer
 ---@return TerminalsTabState
 function M.get_tab(tabpage)
-  local cwd = M.get_tab_cwd(tabpage)
-  local project = state.projects[cwd]
+  local project_key = M.get_tab_project(tabpage)
+  local project = state.projects[project_key]
   if not project then
     project = {
       terminals = {},
@@ -89,7 +124,7 @@ function M.get_tab(tabpage)
       terminal_winid = nil,
       window_layout = nil,
     }
-    state.projects[cwd] = project
+    state.projects[project_key] = project
   end
   return project
 end
@@ -489,232 +524,6 @@ end
 ---@param tabpage? integer
 function M.clear_drag(tabpage)
   M.get_tab(tabpage).drag = nil
-end
-
----@return string
-local function get_state_dir()
-  local state_path = vim.fn.stdpath('state')
-  local dir = string.format('%s/terminals.nvim', state_path)
-  if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, 'p')
-  end
-  return dir
-end
-
----@return string
-local function get_default_zellij_config()
-  local dir = get_state_dir()
-  local path = string.format('%s/zellij_minimal.kdl', dir)
-
-  -- Create a minimal Zellij config if it doesn't exist
-  -- This disables pane frames, status bars, and tab bars to look like a raw terminal.
-  local config_content = [[
-pane_frames false
-simplified_ui true
-default_layout "compact"
-show_startup_tips false
-mouse_mode true
-copy_on_select true
-scrollback_editor "/usr/bin/false"
-mirror_session true
-session_serialization false
-pane_viewport_serialization false
-scrollback_lines_to_serialize 0
-
-// Disable all background/border styling to stay invisible
-theme "default"
-themes {
-    default {
-        fg "#cccccc"
-        bg "#000000"
-        black "#000000"
-        red "#ff5555"
-        green "#50fa7b"
-        yellow "#f1fa8c"
-        blue "#bd93f9"
-        magenta "#ff79c6"
-        cyan "#8be9fd"
-        white "#bfbfbf"
-        orange "#ffb86c"
-    }
-}
-
-// Minimal layout without ANY status/tab bars or plugins
-layout {
-    pane
-}
-
-// Keybinds are largely disabled to avoid conflicts with Neovim/Plugin
-// and to prevent Zellij's UI from being toggled accidentally.
-keybinds {
-    unbind "Ctrl h" "Ctrl l" "Ctrl n" "Ctrl t" "Ctrl p" "Ctrl q" "Ctrl s" "Ctrl o" "Ctrl b"
-}
-]]
-
-  local file = io.open(path, 'w')
-  if file then
-    file:write(config_content)
-    file:close()
-  end
-  return path
-end
-
----@return string
-local function get_default_tmux_config()
-  local dir = get_state_dir()
-  local path = string.format('%s/tmux_minimal.conf', dir)
-
-  -- Minimal tmux config to look like a raw terminal
-  local config_content = [[
-set -g status off
-set -g pane-border-status off
-set -g mouse on
-set -g history-limit 50000
-set -s escape-time 0
-set -g terminal-overrides 'xterm*:smcup@:rmcup@'
-
-# Unbind keys that might conflict with Neovim/Plugin
-unbind C-b
-set -g prefix None
-]]
-
-  local file = io.open(path, 'w')
-  if file then
-    file:write(config_content)
-    file:close()
-  end
-  return path
-end
-
----@param user_path string?
----@return string
-function M.tmux_config_path(user_path)
-  if user_path and vim.fn.filereadable(user_path) == 1 then
-    return user_path
-  end
-  return get_default_tmux_config()
-end
-
----@return string
-function M.zellij_config_path(user_path)
-  if user_path and vim.fn.filereadable(user_path) == 1 then
-    return user_path
-  end
-  return get_default_zellij_config()
-end
-
----@param user_dir string?
----@param session_name string
----@return string
-function M.dtach_socket_path(user_dir, session_name)
-  local dir = user_dir or get_state_dir()
-  if vim.fn.isdirectory(dir) == 0 then
-    vim.fn.mkdir(dir, 'p')
-  end
-  return string.format('%s/dtach_%s', dir, session_name)
-end
-
----@return string
-function M.get_project_name()
-  local cwd = vim.fn.getcwd()
-  return vim.fn.fnamemodify(cwd, ':t')
-end
-
----@return string
-function M.get_cwd_hash()
-  local cwd = vim.fn.getcwd()
-  return vim.fn.sha256(cwd):sub(1, 8)
-end
-
----@return string
-local function get_state_file()
-  local dir = get_state_dir()
-  local hash = M.get_cwd_hash()
-  return string.format('%s/state_%s.json', dir, hash)
-end
-
----@return table
-function M.serialize()
-  local serialized = {
-    projects = {},
-    next_terminal_id = state.next_terminal_id,
-  }
-
-  for cwd, project in pairs(state.projects) do
-    if #project.terminals > 0 then
-      local terminals = {}
-      for _, terminal in ipairs(project.terminals) do
-        table.insert(terminals, {
-          id = terminal.id,
-          title = terminal.title,
-          cwd = terminal.cwd,
-        })
-      end
-
-      serialized.projects[cwd] = {
-        terminals = terminals,
-        active_index = (function()
-          for i, t in ipairs(project.terminals) do
-            if t.id == project.active_id then
-              return i
-            end
-          end
-          return nil
-        end)(),
-        window_layout = project.window_layout,
-        policy = project.policy,
-      }
-    end
-  end
-
-  return serialized
-end
-
-function M.save()
-  local data = M.serialize()
-  local path = get_state_file()
-  local file = io.open(path, 'w')
-  if file then
-    file:write(vim.fn.json_encode(data))
-    file:close()
-  end
-end
-
-function M.load()
-  local path = get_state_file()
-  local file = io.open(path, 'r')
-  if not file then
-    return nil
-  end
-  local content = file:read('*a')
-  file:close()
-  local ok, data = pcall(vim.fn.json_decode, content)
-  return ok and data or nil
-end
-
-function M.clean()
-  -- Clear in-memory state
-  state.projects = {}
-  state.next_terminal_id = 1
-
-  -- Clear on-disk state for current project
-  local path = get_state_file()
-  if path then
-    os.remove(path)
-  end
-end
-
-function M.clean_all()
-  -- Clear in-memory state
-  state.projects = {}
-  state.next_terminal_id = 1
-
-  -- Clear all on-disk state files
-  local dir = get_state_dir()
-  local files = vim.fn.glob(dir .. '/state_*.json', false, true)
-  for _, file in ipairs(files) do
-    os.remove(file)
-  end
 end
 
 return M

@@ -40,7 +40,6 @@ local pending_title_bufs = {}
 local pending_title_sync = false
 local uv = vim.uv or vim.loop
 local title_sync_timer = nil
-local warned_missing_backends = {}
 
 ---@param tabpage? integer
 ---@return TerminalsConfig
@@ -53,50 +52,6 @@ local wheel_passthrough = false
 
 local function is_quitting()
   return require('terminals')._is_quitting == true
-end
-
----@param backend string
----@return string?
-local function backend_command(backend)
-  if backend == 'zellij' or backend == 'tmux' or backend == 'dtach' then
-    return backend
-  end
-  return nil
-end
-
----@param backend string
----@return boolean
-local function backend_available(backend)
-  local cmd = backend_command(backend)
-  return cmd == nil or vim.fn.executable(cmd) == 1
-end
-
----@param backend string
----@return boolean
-local function warn_missing_backend(backend)
-  if warned_missing_backends[backend] then
-    return false
-  end
-  warned_missing_backends[backend] = true
-  vim.notify(
-    string.format(
-      'Terminals.nvim: backend "%s" is not installed; falling back to backend = "none".',
-      backend
-    ),
-    vim.log.levels.WARN
-  )
-  return true
-end
-
----@param tabpage? integer
----@return string
-local function resolved_backend(tabpage)
-  local backend = config(tabpage).backend or 'none'
-  if backend_available(backend) then
-    return backend
-  end
-  warn_missing_backend(backend)
-  return 'none'
 end
 
 ---@return integer
@@ -528,39 +483,6 @@ local function shell_for_command(cmd, terminal_id, tabpage)
   end
 
   local cfg = config(tabpage)
-  local backend = resolved_backend(tabpage)
-
-  if backend == 'zellij' and terminal_id then
-    local backend_cfg = cfg.backends and cfg.backends.zellij or {}
-    local hash = state.get_cwd_hash()
-    -- Format: <hash>_<terminal_id> (e.g., 3bb414d0_1)
-    local session_name = string.format('%s_%d', hash, terminal_id)
-    local config_path = state.zellij_config_path(backend_cfg.config_path)
-    return string.format('zellij --config %s attach -c %s', config_path, session_name)
-  end
-
-  if backend == 'tmux' and terminal_id then
-    local backend_cfg = cfg.backends and cfg.backends.tmux or {}
-    local hash = state.get_cwd_hash()
-    local session_name = string.format('%s_%d', hash, terminal_id)
-    local config_path = state.tmux_config_path(backend_cfg.config_path)
-
-    -- Per-tab session: Each terminal gets its own independent tmux session
-    -- -A: attach if session exists, otherwise create it
-    return string.format('tmux -f %s new-session -A -s %s', config_path, session_name)
-  end
-
-  if backend == 'dtach' and terminal_id then
-    local backend_cfg = cfg.backends and cfg.backends.dtach or {}
-    local hash = state.get_cwd_hash()
-    local session_name = string.format('%s_%d', hash, terminal_id)
-    local socket_path = state.dtach_socket_path(backend_cfg.socket_dir, session_name)
-
-    -- Per-tab session with dtach: -A attaches if exists, creates otherwise
-    -- -z flag enables the session to be killed when dtach exits
-    return string.format('dtach -A %s -z %s', socket_path, cfg.shell or vim.o.shell)
-  end
-
   return cfg.shell or vim.o.shell
 end
 
@@ -591,9 +513,6 @@ function M.create(opts)
   local terminal_id = state.next_id()
   local term_opts = {
     cwd = cwd,
-    env = {
-      ZELLIJ_SKIP_CHECK_UPDATE = 'true',
-    },
   }
   local job_id = vim.fn.termopen(shell_for_command(cmd, terminal_id, tabpage), term_opts)
 
@@ -1204,176 +1123,6 @@ function M.prune_invalid_buffers()
       end
     end
   end
-end
-
----@param data table
----@param opts? { show?: boolean }
-function M.restore(data, opts)
-  opts = opts or {}
-  if not data or not data.projects then
-    return
-  end
-
-  local original_tab = state.current_tabpage()
-  local original_win = current_window()
-
-  -- Restore the global next ID counter
-  if data.next_terminal_id then
-    state.set_next_id(data.next_terminal_id)
-  end
-
-  local current_tabpages = vim.api.nvim_list_tabpages()
-
-  -- Map current tabpages to their CWD, handling multiple tabs with same CWD
-  local tab_cwd_map = {}
-  for _, tp in ipairs(current_tabpages) do
-    if vim.api.nvim_tabpage_is_valid(tp) then
-      local ok, tab_cwd = pcall(state.get_tab_cwd, tp)
-      if ok and tab_cwd then
-        tab_cwd_map[tab_cwd] = tab_cwd_map[tab_cwd] or {}
-        table.insert(tab_cwd_map[tab_cwd], tp)
-      end
-    end
-  end
-
-  -- Keep track of used tabpages to avoid duplicates
-  local used_tabs = {}
-
-  -- Sort projects so they are restored in a deterministic order
-  local cwds = {}
-  for cwd in pairs(data.projects) do
-    table.insert(cwds, cwd)
-  end
-  table.sort(cwds)
-
-  for _, cwd in ipairs(cwds) do
-    local project_data = data.projects[cwd]
-    -- Find the next available tabpage for this CWD
-    local tabpage = nil
-    if tab_cwd_map[cwd] and #tab_cwd_map[cwd] > 0 then
-      tabpage = table.remove(tab_cwd_map[cwd], 1)
-      used_tabs[tabpage] = true
-    end
-
-    if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-      -- Fall back to any unused current tabpage if CWD matching is not ready
-      -- yet (for example right after session restoration).
-      for _, candidate in ipairs(current_tabpages) do
-        if vim.api.nvim_tabpage_is_valid(candidate) and not used_tabs[candidate] then
-          tabpage = candidate
-          used_tabs[tabpage] = true
-          break
-        end
-      end
-    end
-
-    if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-      -- Final fallback to the original tab when no other tabpage is available.
-      if not used_tabs[original_tab] then
-        tabpage = original_tab
-        used_tabs[tabpage] = true
-      end
-    end
-
-    if tabpage then
-      -- We need to ensure the tabpage actually switches to the project directory
-      -- if it's supposed to be directory-based.
-      pcall(vim.api.nvim_set_current_tabpage, tabpage)
-      pcall(vim.cmd, 'tcd ' .. vim.fn.fnameescape(cwd))
-
-      -- Initializing project state, cleanup existing ones if any
-      local project = state.get_tab(tabpage)
-      for _, term in ipairs(project.terminals or {}) do
-        if vim.api.nvim_buf_is_valid(term.bufnr) then
-          vim.api.nvim_buf_delete(term.bufnr, { force = true })
-        end
-      end
-      project.terminals = {}
-      project.active_id = nil
-      project.drag = nil
-      project.primary_terminal_winid = nil
-      project.terminal_winids = {}
-      project.window_terminal_ids = {}
-      project.terminal_winid = nil
-      project.window_layout = project_data.window_layout
-      project.policy = project_data.policy or project.policy
-
-      -- Re-create terminal buffers
-      local active_id = nil
-      for j, term_info in ipairs(project_data.terminals) do
-        -- Use a regular hidden buffer so restored terminals behave the same
-        -- way as terminals created during the session.
-        local bufnr = vim.api.nvim_create_buf(false, false)
-        vim.bo[bufnr].buflisted = false
-        vim.bo[bufnr].bufhidden = 'hide'
-        vim.bo[bufnr].filetype = 'terminal'
-        attach_mouse_mappings(bufnr)
-
-        local terminal_id = term_info.id or state.next_id()
-        local job_id = vim.api.nvim_buf_call(bufnr, function()
-          return vim.fn.termopen(shell_for_command(nil, terminal_id, tabpage), {
-            cwd = term_info.cwd,
-            env = {
-              ZELLIJ_SKIP_CHECK_UPDATE = 'true',
-            },
-          })
-        end)
-
-        local terminal = {
-          id = terminal_id,
-          bufnr = bufnr,
-          job_id = job_id,
-          title = term_info.title,
-          cwd = term_info.cwd,
-          alive = true,
-        }
-
-        state.add_terminal(terminal, tabpage)
-        if j == project_data.active_index then
-          active_id = terminal_id
-        end
-      end
-
-      if active_id then
-        state.set_active(active_id, tabpage)
-      end
-
-      -- Show if requested or if terminal window already exists
-      local active = state.active(tabpage)
-      if active then
-        local target_win = nil
-        for _, winid in ipairs(vim.api.nvim_tabpage_list_wins(tabpage)) do
-          if state.is_terminal_window(winid, tabpage) then
-            target_win = winid
-            break
-          end
-        end
-
-        if not target_win and opts.show then
-          target_win = ensure_terminal_window(tabpage)
-        end
-
-        if target_win then
-          state.add_terminal_window(target_win, tabpage)
-          state.set_window_terminal(target_win, active.id, tabpage)
-          with_terminal_window_unlocked(target_win, function()
-            vim.api.nvim_win_set_buf(target_win, active.bufnr)
-          end)
-          set_terminal_window_locked(target_win, true)
-        end
-      end
-    end
-  end
-
-  if vim.api.nvim_tabpage_is_valid(original_tab) then
-    vim.api.nvim_set_current_tabpage(original_tab)
-  end
-  if vim.api.nvim_win_is_valid(original_win) then
-    vim.api.nvim_set_current_win(original_win)
-  end
-
-  ensure_title_sync_timer()
-  require('terminals.ui.winbar').refresh_all()
 end
 
 ---@param opts? { tabpage?: integer, vertical?: boolean }

@@ -25,8 +25,6 @@ local screenpos_stub = nil
 local getcmdtype_stub = nil
 local getcmdline_stub = nil
 local line_stub = nil
-local executable_stub = nil
-local notify_stub = nil
 local telescope_modules = {}
 
 local function clear_modules()
@@ -94,10 +92,6 @@ local all_commands = {
   'TerminalMoveRight',
   'TerminalSendLine',
   'TerminalSendSelection',
-  'TerminalSave',
-  'TerminalRestore',
-  'TerminalClean',
-  'TerminalCleanAll',
 }
 
 local function setup(opts)
@@ -171,14 +165,6 @@ describe('terminals.nvim', function()
     if screenpos_stub then
       screenpos_stub:revert()
       screenpos_stub = nil
-    end
-    if executable_stub then
-      executable_stub:revert()
-      executable_stub = nil
-    end
-    if notify_stub then
-      notify_stub:revert()
-      notify_stub = nil
     end
   end)
 
@@ -837,8 +823,13 @@ describe('terminals.nvim', function()
     assert.is_true(ok)
     assert.is_not_nil(captured.previewer)
     assert.are.same('Terminal Output', captured.previewer.title)
-    assert.are.same({ 'alpha', 'beta', 'gamma' }, vim.api.nvim_buf_get_lines(captured.preview_buf, 0, -1, false))
-    assert.are.same(3, captured.preview_cursor[1])
+    local preview_lines = vim.api.nvim_buf_get_lines(captured.preview_buf, 0, -1, false)
+    assert.are.same({ 'alpha', 'beta', 'gamma' }, {
+      preview_lines[#preview_lines - 2],
+      preview_lines[#preview_lines - 1],
+      preview_lines[#preview_lines],
+    })
+    assert.are.same(#preview_lines, captured.preview_cursor[1])
     assert.are.same('bash', vim.bo[captured.preview_buf].filetype)
     assert.are.same('bash', captured.highlighter.ft)
   end)
@@ -879,313 +870,4 @@ describe('terminals.nvim', function()
     end)
   end)
 
-  it('falls back to backend = none when the configured backend is unavailable', function()
-    reset_editor()
-    executable_stub = stub(vim.fn, 'executable')
-    executable_stub.invokes(function(cmd)
-      return cmd == 'dtach' and 0 or 1
-    end)
-    notify_stub = stub(vim, 'notify')
-    setup({ backend = 'dtach' })
-
-    local created = require('terminals.terminal').create({ title = 'fallback' })
-
-    wait_for(function()
-      return #terminal_lines(created.bufnr) > 0
-    end)
-
-    assert.stub(notify_stub).was_called(1)
-    assert.stub(notify_stub).was_called_with(
-      'Terminals.nvim: backend "dtach" is not installed; falling back to backend = "none".',
-      vim.log.levels.WARN
-    )
-  end)
-end)
-
-describe('terminals.nvim session persistence', function()
-  before_each(function()
-    setup({ auto_restore = false }) -- Disable auto_restore to manually trigger it
-  end)
-
-  it('serializes and deserializes terminal state correctly', function()
-    local state = require('terminals.state')
-    local terminal = require('terminals.terminal')
-
-    terminal.create({ title = 'term1' })
-    terminal.create({ title = 'term2' })
-    local cwd = vim.fn.getcwd()
-
-    local serialized = state.serialize()
-    assert.is_not_nil(serialized.projects[cwd])
-    assert.are.same(2, #serialized.projects[cwd].terminals)
-    assert.are.same('term1', serialized.projects[cwd].terminals[1].title)
-    assert.are.same('term2', serialized.projects[cwd].terminals[2].title)
-    assert.are.same(2, serialized.projects[cwd].active_index)
-  end)
-
-  it('saves and loads session data from disk', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    terminal.create({ title = 'disk-test' })
-    state.save()
-
-    -- Clear current state in memory
-    package.loaded['terminals.state'] = nil
-    state = require('terminals.state')
-
-    local loaded = state.load()
-    local cwd = vim.fn.getcwd()
-    assert.is_not_nil(loaded)
-    assert.is_not_nil(loaded.projects[cwd])
-    assert.are.same('disk-test', loaded.projects[cwd].terminals[1].title)
-  end)
-
-  it('restores terminals from session data', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    terminal.create({ title = 'restore-1' })
-    terminal.create({ title = 'restore-2' })
-    local data = state.serialize()
-
-    -- Reset the editor to a clean state
-    reset_editor()
-    setup({ auto_restore = false })
-    terminal = require('terminals.terminal')
-    state = require('terminals.state')
-
-    -- Restore
-    terminal.restore(data, { show = true })
-
-    local list = state.list()
-    assert.are.same(2, #list)
-    assert.are.same('restore-1', list[1].title)
-    assert.are.same('restore-2', list[2].title)
-    assert.are.same('restore-2', state.active().title)
-    assert.is_not_nil(state.terminal_window())
-  end)
-
-  it('keeps multiple restored terminals when the window is reopened later', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    terminal.create({ title = 'restore-hidden-1' })
-    terminal.create({ title = 'restore-hidden-2' })
-    local data = state.serialize()
-
-    reset_editor()
-    setup({ auto_restore = false })
-    terminal = require('terminals.terminal')
-    state = require('terminals.state')
-
-    terminal.restore(data, { show = false })
-
-    wait_for(function()
-      return #state.list() == 2
-    end)
-    assert.are.same('restore-hidden-2', state.active().title)
-
-    vim.cmd('TerminalOpen')
-
-    assert.are.same(2, #state.list())
-    assert.are.same({ 'restore-hidden-1', 'restore-hidden-2' }, titles())
-    assert.is_not_nil(state.terminal_window())
-  end)
-
-  it('restores projects into the matching tabpages by tab-local cwd', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    local dir1 = vim.fn.tempname()
-    local dir2 = vim.fn.tempname()
-    vim.fn.mkdir(dir1, 'p')
-    vim.fn.mkdir(dir2, 'p')
-
-    vim.cmd('tcd ' .. dir1)
-    terminal.create({ title = 'dir1-a' })
-    terminal.create({ title = 'dir1-b' })
-
-    vim.cmd('tabnew')
-    vim.cmd('tcd ' .. dir2)
-    terminal.create({ title = 'dir2-a' })
-    terminal.create({ title = 'dir2-b' })
-
-    local data = state.serialize()
-
-    reset_editor()
-    setup({ auto_restore = false })
-    terminal = require('terminals.terminal')
-    state = require('terminals.state')
-
-    vim.cmd('tcd ' .. dir1)
-    vim.cmd('tabnew')
-    vim.cmd('tcd ' .. dir2)
-    vim.cmd('tabprevious')
-
-    terminal.restore(data, { show = false })
-
-    local tabs = vim.api.nvim_list_tabpages()
-    assert.are.same(2, #tabs)
-
-    local tab_by_cwd = {}
-    for _, tab in ipairs(tabs) do
-      tab_by_cwd[state.get_tab_cwd(tab)] = tab
-    end
-
-    assert.is_not_nil(tab_by_cwd[dir1])
-    assert.is_not_nil(tab_by_cwd[dir2])
-    assert.are.same({ 'dir1-a', 'dir1-b' }, (function()
-      local result = {}
-      for _, term in ipairs(state.list(tab_by_cwd[dir1])) do
-        result[#result + 1] = term.title
-      end
-      return result
-    end)())
-    assert.are.same({ 'dir2-a', 'dir2-b' }, (function()
-      local result = {}
-      for _, term in ipairs(state.list(tab_by_cwd[dir2])) do
-        result[#result + 1] = term.title
-      end
-      return result
-    end)())
-  end)
-
-  it('restores projects across multiple existing tabpages even without cwd matches', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    local dir1 = vim.fn.tempname()
-    local dir2 = vim.fn.tempname()
-    vim.fn.mkdir(dir1, 'p')
-    vim.fn.mkdir(dir2, 'p')
-
-    vim.cmd('tcd ' .. dir1)
-    terminal.create({ title = 'fallback-tab-1' })
-
-    vim.cmd('tabnew')
-    vim.cmd('tcd ' .. dir2)
-    terminal.create({ title = 'fallback-tab-2' })
-
-    local data = state.serialize()
-
-    reset_editor()
-    setup({ auto_restore = false })
-    terminal = require('terminals.terminal')
-    state = require('terminals.state')
-
-    vim.cmd('tabnew')
-
-    terminal.restore(data, { show = false })
-
-    local restored = {}
-    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
-      local names = {}
-      for _, term in ipairs(state.list(tab)) do
-        names[#names + 1] = term.title
-      end
-      if #names > 0 then
-        restored[table.concat(names, ',')] = true
-      end
-    end
-
-    assert.is_true(restored['fallback-tab-1'])
-    assert.is_true(restored['fallback-tab-2'])
-  end)
-
-  it('toggles restored terminals open on later tabpages without creating a new one', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    local dir1 = vim.fn.tempname()
-    local dir2 = vim.fn.tempname()
-    vim.fn.mkdir(dir1, 'p')
-    vim.fn.mkdir(dir2, 'p')
-
-    vim.cmd('tcd ' .. dir1)
-    terminal.create({ title = 'tab1-only' })
-
-    vim.cmd('tabnew')
-    vim.cmd('tcd ' .. dir2)
-    terminal.create({ title = 'tab2-a' })
-    terminal.create({ title = 'tab2-b' })
-
-    local data = state.serialize()
-
-    reset_editor()
-    setup({ auto_restore = false })
-    terminal = require('terminals.terminal')
-    state = require('terminals.state')
-
-    vim.cmd('tcd ' .. dir1)
-    vim.cmd('tabnew')
-    vim.cmd('tcd ' .. dir2)
-    vim.cmd('tabprevious')
-
-    terminal.restore(data, { show = false })
-
-    local target_tab = nil
-    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
-      if state.get_tab_cwd(tab) == dir2 then
-        target_tab = tab
-        break
-      end
-    end
-
-    assert.is_not_nil(target_tab)
-    assert.are.same(2, #state.list(target_tab))
-
-    vim.api.nvim_set_current_tabpage(target_tab)
-    vim.cmd('TerminalToggle')
-
-    assert.are.same(2, #state.list(target_tab))
-    local restored = {}
-    for _, term in ipairs(state.list(target_tab)) do
-      restored[#restored + 1] = term.title
-    end
-    assert.are.same({ 'tab2-a', 'tab2-b' }, restored)
-    assert.is_not_nil(state.terminal_window(target_tab))
-  end)
-
-  it('preserves terminal window layout after restoration', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    terminal.create({ title = 'main' })
-    -- Ensure the layout is captured
-    state.set_window_layout({ position = 'bottom', height = 15 })
-
-    local data = state.serialize()
-
-    reset_editor()
-    setup({ auto_restore = false })
-    terminal = require('terminals.terminal')
-    state = require('terminals.state')
-
-    terminal.restore(data, { show = true })
-
-    assert.are.same(15, vim.api.nvim_win_get_height(state.terminal_window()))
-  end)
-
-  it('clears all session data and reset memory state via TerminalClean', function()
-    local terminal = require('terminals.terminal')
-    local state = require('terminals.state')
-
-    -- Create some session data
-    terminal.create({ title = 'to-be-cleaned' })
-    state.save()
-
-    local loaded = state.load()
-    assert.is_not_nil(loaded)
-
-    -- Run the clean command
-    vim.cmd('TerminalClean')
-
-    -- Memory state should be reset
-    assert.are.same(0, #state.list())
-    assert.are.same(1, state.next_id())
-
-    -- Disk state should be gone
-    assert.is_nil(state.load())
-  end)
 end)

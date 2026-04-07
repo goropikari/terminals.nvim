@@ -16,19 +16,6 @@ M.config = {
   commands = {},
   osc_title = true,
   shell = nil,
-  auto_restore = true,
-  backend = 'none',
-  backends = {
-    zellij = {
-      config_path = nil,
-    },
-    tmux = {
-      config_path = nil,
-    },
-    dtach = {
-      socket_dir = nil,
-    },
-  },
   start_in_insert = true,
   terminal_position = 'bottom',
   terminal_height = 12,
@@ -212,43 +199,6 @@ local function setup_commands()
         terminal.send_range(opts.line1, opts.line2)
       end, { range = true })
     end,
-    TerminalSave = function()
-      vim.api.nvim_create_user_command('TerminalSave', function()
-        require('terminals.state').save()
-      end, {})
-    end,
-    TerminalRestore = function()
-      vim.api.nvim_create_user_command('TerminalRestore', function()
-        local data = require('terminals.state').load()
-        if data then
-          M._did_restore = true
-          require('terminals.terminal').restore(data, { show = true })
-        end
-      end, {})
-    end,
-    TerminalClean = function()
-      vim.api.nvim_create_user_command('TerminalClean', function()
-        require('terminals.state').clean()
-        vim.notify('Terminals.nvim: Session data cleared.', vim.log.levels.INFO)
-      end, {})
-    end,
-    TerminalCleanAll = function()
-      vim.api.nvim_create_user_command('TerminalCleanAll', function()
-        local state = require('terminals.state')
-        state.clean()
-        local data_path = vim.fn.stdpath('data')
-        local dir = string.format('%s/terminals.nvim', data_path)
-        if vim.fn.isdirectory(dir) == 1 then
-          local files = vim.fn.glob(dir .. '/*', false, true)
-          for _, file in ipairs(files) do
-            if file:match('%.json$') then
-              os.remove(file)
-            end
-          end
-        end
-        vim.notify('Terminals.nvim: All session data cleared.', vim.log.levels.INFO)
-      end, {})
-    end,
   }
 
   for _, command_name in ipairs(commands) do
@@ -291,68 +241,6 @@ end
 
 local function setup_autocmds()
   local group = vim.api.nvim_create_augroup('TerminalsNvim', { clear = true })
-
-  local function can_restore_projects(data)
-    if not data or not data.projects then
-      return false
-    end
-
-    local expected = {}
-    local expected_count = 0
-    for cwd in pairs(data.projects) do
-      expected[cwd] = true
-      expected_count = expected_count + 1
-    end
-
-    if expected_count <= 1 then
-      return true
-    end
-
-    local seen = {}
-    local seen_count = 0
-    local state = require('terminals.state')
-    for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
-      local cwd = state.get_tab_cwd(tabpage)
-      if expected[cwd] and not seen[cwd] then
-        seen[cwd] = true
-        seen_count = seen_count + 1
-      end
-    end
-
-    return seen_count == expected_count
-  end
-
-  local function schedule_restore(attempt)
-    attempt = attempt or 1
-    local terminals = require('terminals')
-
-    vim.defer_fn(function()
-      if terminals._did_restore then
-        return
-      end
-
-       local state = require('terminals.state')
-       for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
-         if #state.list(tabpage) > 0 then
-           terminals._did_restore = true
-           return
-         end
-       end
-
-      local data = state.load()
-      if not data then
-        return
-      end
-
-      if not can_restore_projects(data) and attempt < 10 then
-        schedule_restore(attempt + 1)
-        return
-      end
-
-      terminals._did_restore = true
-      require('terminals.terminal').restore(data, { show = false })
-    end, 100)
-  end
 
   vim.api.nvim_create_autocmd({ 'TabEnter', 'WinEnter', 'BufEnter', 'DirChanged' }, {
     group = group,
@@ -457,42 +345,9 @@ local function setup_autocmds()
         return
       end
       terminals._is_quitting = true
-      require('terminals.state').save()
       require('terminals.terminal').cleanup_for_quit()
     end,
   })
-
-  vim.api.nvim_create_autocmd({ 'VimEnter', 'SessionLoadPost' }, {
-    group = group,
-    callback = function(ev)
-      local terminals = require('terminals')
-      if not terminals.config.auto_restore then
-        return
-      end
-
-      -- If a session is being loaded, VimEnter is too early and incomplete.
-      -- We must rely on SessionLoadPost.
-      if ev.event == 'VimEnter' and (vim.v.this_session ~= '' or vim.g.SessionLoad) then
-        return
-      end
-
-      -- SessionLoadPost should always trigger a fresh restore because the
-      -- whole tab/window layout has been replaced by mksession.
-      if ev.event == 'SessionLoadPost' then
-        terminals._did_restore = false
-      end
-
-      -- Wait until session plugins have restored tab-local CWDs before
-      -- attempting project restore.
-      schedule_restore()
-    end,
-  })
-
-  -- If the plugin is lazy-loaded after VimEnter or SessionLoadPost,
-  -- trigger an immediate restore if auto_restore is enabled.
-  if M.config.auto_restore then
-    schedule_restore()
-  end
 end
 
 ---@param opts? table
