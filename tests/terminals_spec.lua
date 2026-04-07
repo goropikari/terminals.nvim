@@ -25,6 +25,8 @@ local screenpos_stub = nil
 local getcmdtype_stub = nil
 local getcmdline_stub = nil
 local line_stub = nil
+local executable_stub = nil
+local notify_stub = nil
 local telescope_modules = {}
 
 local function clear_modules()
@@ -169,6 +171,14 @@ describe('terminals.nvim', function()
     if screenpos_stub then
       screenpos_stub:revert()
       screenpos_stub = nil
+    end
+    if executable_stub then
+      executable_stub:revert()
+      executable_stub = nil
+    end
+    if notify_stub then
+      notify_stub:revert()
+      notify_stub = nil
     end
   end)
 
@@ -867,6 +877,28 @@ describe('terminals.nvim', function()
       local content = table.concat(terminal_lines(target), '\n')
       return content:match('irst ') ~= nil
     end)
+  end)
+
+  it('falls back to backend = none when the configured backend is unavailable', function()
+    reset_editor()
+    executable_stub = stub(vim.fn, 'executable')
+    executable_stub.invokes(function(cmd)
+      return cmd == 'dtach' and 0 or 1
+    end)
+    notify_stub = stub(vim, 'notify')
+    setup({ backend = 'dtach' })
+
+    local created = require('terminals.terminal').create({ title = 'fallback' })
+
+    wait_for(function()
+      return #terminal_lines(created.bufnr) > 0
+    end)
+
+    assert.stub(notify_stub).was_called(1)
+    assert.stub(notify_stub).was_called_with(
+      'Terminals.nvim: backend "dtach" is not installed; falling back to backend = "none".',
+      vim.log.levels.WARN
+    )
   end)
 end)
 

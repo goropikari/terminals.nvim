@@ -40,6 +40,7 @@ local pending_title_bufs = {}
 local pending_title_sync = false
 local uv = vim.uv or vim.loop
 local title_sync_timer = nil
+local warned_missing_backends = {}
 
 ---@param tabpage? integer
 ---@return TerminalsConfig
@@ -52,6 +53,50 @@ local wheel_passthrough = false
 
 local function is_quitting()
   return require('terminals')._is_quitting == true
+end
+
+---@param backend string
+---@return string?
+local function backend_command(backend)
+  if backend == 'zellij' or backend == 'tmux' or backend == 'dtach' then
+    return backend
+  end
+  return nil
+end
+
+---@param backend string
+---@return boolean
+local function backend_available(backend)
+  local cmd = backend_command(backend)
+  return cmd == nil or vim.fn.executable(cmd) == 1
+end
+
+---@param backend string
+---@return boolean
+local function warn_missing_backend(backend)
+  if warned_missing_backends[backend] then
+    return false
+  end
+  warned_missing_backends[backend] = true
+  vim.notify(
+    string.format(
+      'Terminals.nvim: backend "%s" is not installed; falling back to backend = "none".',
+      backend
+    ),
+    vim.log.levels.WARN
+  )
+  return true
+end
+
+---@param tabpage? integer
+---@return string
+local function resolved_backend(tabpage)
+  local backend = config(tabpage).backend or 'none'
+  if backend_available(backend) then
+    return backend
+  end
+  warn_missing_backend(backend)
+  return 'none'
 end
 
 ---@return integer
@@ -483,7 +528,7 @@ local function shell_for_command(cmd, terminal_id, tabpage)
   end
 
   local cfg = config(tabpage)
-  local backend = cfg.backend or 'none'
+  local backend = resolved_backend(tabpage)
 
   if backend == 'zellij' and terminal_id then
     local backend_cfg = cfg.backends and cfg.backends.zellij or {}
