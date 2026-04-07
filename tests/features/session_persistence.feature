@@ -1,11 +1,11 @@
 Feature: Session Persistence
   As a Neovim user
-  I want my terminal sessions to be automatically saved and restored per project
+  I want my terminal sessions to be automatically saved and restored per git worktree
   So that I can resume my work where I left off when reopening a project
 
   Background:
     Given I have terminals.nvim installed with auto_restore enabled
-    And I am working in a project directory "/home/user/project-alpha"
+    And I am working in a git worktree rooted at "/home/user/project-alpha"
 
   Scenario: Save terminal state on Neovim exit
     Given I have created 3 terminals with titles "server", "tests", and "logs"
@@ -23,18 +23,24 @@ Feature: Session Persistence
   Scenario: Restore terminal state on Neovim start
     Given I previously saved a session with 2 terminals "dev" and "build"
     And the "build" terminal was active when saved
-    When I open Neovim in the same project directory
+    When I open Neovim in the same git worktree
     Then 2 terminal buffers should be recreated
     And the terminals should be restored in order: "dev", "build"
     And the "build" terminal should be set as active
     But the terminal windows should remain hidden until explicitly shown
 
-  Scenario: Project isolation by CWD
-    Given I have a session saved for "/home/user/project-alpha"
-    And I have a different session saved for "/home/user/project-beta"
-    When I open Neovim in "/home/user/project-alpha"
+  Scenario: Project isolation by git worktree
+    Given I have a session saved for git worktree "/home/user/project-alpha"
+    And I have a different session saved for git worktree "/home/user/project-beta"
+    When I open Neovim in git worktree "/home/user/project-alpha"
     Then only the "project-alpha" terminals should be restored
     And the "project-beta" terminals should not be affected
+
+  Scenario: Same worktree shares one terminal group across tabpages
+    Given I have one tabpage with cwd "/home/user/project-alpha/pkg/api"
+    And I have another tabpage with cwd "/home/user/project-alpha/pkg/web"
+    When both tabpages belong to the same git worktree "/home/user/project-alpha"
+    Then both tabpages should use the same terminal group
 
   Scenario: Manual save command
     Given I have created 2 terminals
@@ -81,7 +87,7 @@ Feature: Session Persistence
     And the terminal window width should be 50
 
   Scenario: Clean session data
-    Given I have saved session data for multiple projects
+    Given I have saved session data for multiple git worktrees
     When I execute ":TerminalClean"
     Then all in-memory state should be cleared
     And all on-disk state files should be deleted
