@@ -292,6 +292,68 @@ end
 local function setup_autocmds()
   local group = vim.api.nvim_create_augroup('TerminalsNvim', { clear = true })
 
+  local function can_restore_projects(data)
+    if not data or not data.projects then
+      return false
+    end
+
+    local expected = {}
+    local expected_count = 0
+    for cwd in pairs(data.projects) do
+      expected[cwd] = true
+      expected_count = expected_count + 1
+    end
+
+    if expected_count <= 1 then
+      return true
+    end
+
+    local seen = {}
+    local seen_count = 0
+    local state = require('terminals.state')
+    for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
+      local cwd = state.get_tab_cwd(tabpage)
+      if expected[cwd] and not seen[cwd] then
+        seen[cwd] = true
+        seen_count = seen_count + 1
+      end
+    end
+
+    return seen_count == expected_count
+  end
+
+  local function schedule_restore(attempt)
+    attempt = attempt or 1
+    local terminals = require('terminals')
+
+    vim.defer_fn(function()
+      if terminals._did_restore then
+        return
+      end
+
+       local state = require('terminals.state')
+       for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
+         if #state.list(tabpage) > 0 then
+           terminals._did_restore = true
+           return
+         end
+       end
+
+      local data = state.load()
+      if not data then
+        return
+      end
+
+      if not can_restore_projects(data) and attempt < 10 then
+        schedule_restore(attempt + 1)
+        return
+      end
+
+      terminals._did_restore = true
+      require('terminals.terminal').restore(data, { show = false })
+    end, 100)
+  end
+
   vim.api.nvim_create_autocmd({ 'TabEnter', 'WinEnter', 'BufEnter', 'DirChanged' }, {
     group = group,
     callback = function()
@@ -420,35 +482,16 @@ local function setup_autocmds()
         terminals._did_restore = false
       end
 
-      -- Defer to ensure CWD and tabpages are fully settled by session plugins.
-      vim.defer_fn(function()
-        if terminals._did_restore then
-          return
-        end
-
-        local data = require('terminals.state').load()
-        if data then
-          terminals._did_restore = true
-          require('terminals.terminal').restore(data, { show = false })
-        end
-      end, 200)
+      -- Wait until session plugins have restored tab-local CWDs before
+      -- attempting project restore.
+      schedule_restore()
     end,
   })
 
   -- If the plugin is lazy-loaded after VimEnter or SessionLoadPost,
   -- trigger an immediate restore if auto_restore is enabled.
   if M.config.auto_restore then
-    vim.defer_fn(function()
-      if M._did_restore then
-        return
-      end
-
-      local data = require('terminals.state').load()
-      if data then
-        M._did_restore = true
-        require('terminals.terminal').restore(data, { show = false })
-      end
-    end, 200)
+    schedule_restore()
   end
 end
 

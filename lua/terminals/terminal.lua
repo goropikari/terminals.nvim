@@ -1228,16 +1228,10 @@ function M.restore(data, opts)
   local tab_cwd_map = {}
   for _, tp in ipairs(current_tabpages) do
     if vim.api.nvim_tabpage_is_valid(tp) then
-      local wins = vim.api.nvim_tabpage_list_wins(tp)
-      for _, winid in ipairs(wins) do
-        if vim.api.nvim_win_is_valid(winid) then
-          local ok, tab_cwd = pcall(vim.fn.getcwd, winid)
-          if ok and tab_cwd then
-            tab_cwd_map[tab_cwd] = tab_cwd_map[tab_cwd] or {}
-            table.insert(tab_cwd_map[tab_cwd], tp)
-            break
-          end
-        end
+      local ok, tab_cwd = pcall(state.get_tab_cwd, tp)
+      if ok and tab_cwd then
+        tab_cwd_map[tab_cwd] = tab_cwd_map[tab_cwd] or {}
+        table.insert(tab_cwd_map[tab_cwd], tp)
       end
     end
   end
@@ -1262,7 +1256,19 @@ function M.restore(data, opts)
     end
 
     if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
-      -- Fallback to original tab if not already used, or find another one
+      -- Fall back to any unused current tabpage if CWD matching is not ready
+      -- yet (for example right after session restoration).
+      for _, candidate in ipairs(current_tabpages) do
+        if vim.api.nvim_tabpage_is_valid(candidate) and not used_tabs[candidate] then
+          tabpage = candidate
+          used_tabs[tabpage] = true
+          break
+        end
+      end
+    end
+
+    if not tabpage or not vim.api.nvim_tabpage_is_valid(tabpage) then
+      -- Final fallback to the original tab when no other tabpage is available.
       if not used_tabs[original_tab] then
         tabpage = original_tab
         used_tabs[tabpage] = true
@@ -1284,13 +1290,20 @@ function M.restore(data, opts)
       end
       project.terminals = {}
       project.active_id = nil
+      project.drag = nil
+      project.primary_terminal_winid = nil
+      project.terminal_winids = {}
+      project.window_terminal_ids = {}
+      project.terminal_winid = nil
       project.window_layout = project_data.window_layout
       project.policy = project_data.policy or project.policy
 
       -- Re-create terminal buffers
       local active_id = nil
       for j, term_info in ipairs(project_data.terminals) do
-        local bufnr = vim.api.nvim_create_buf(false, true)
+        -- Use a regular hidden buffer so restored terminals behave the same
+        -- way as terminals created during the session.
+        local bufnr = vim.api.nvim_create_buf(false, false)
         vim.bo[bufnr].buflisted = false
         vim.bo[bufnr].bufhidden = 'hide'
         vim.bo[bufnr].filetype = 'terminal'

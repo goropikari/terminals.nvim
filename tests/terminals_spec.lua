@@ -952,6 +952,8 @@ describe('terminals.nvim session persistence', function()
     -- Reset the editor to a clean state
     reset_editor()
     setup({ auto_restore = false })
+    terminal = require('terminals.terminal')
+    state = require('terminals.state')
 
     -- Restore
     terminal.restore(data, { show = true })
@@ -962,6 +964,187 @@ describe('terminals.nvim session persistence', function()
     assert.are.same('restore-2', list[2].title)
     assert.are.same('restore-2', state.active().title)
     assert.is_not_nil(state.terminal_window())
+  end)
+
+  it('keeps multiple restored terminals when the window is reopened later', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    terminal.create({ title = 'restore-hidden-1' })
+    terminal.create({ title = 'restore-hidden-2' })
+    local data = state.serialize()
+
+    reset_editor()
+    setup({ auto_restore = false })
+    terminal = require('terminals.terminal')
+    state = require('terminals.state')
+
+    terminal.restore(data, { show = false })
+
+    wait_for(function()
+      return #state.list() == 2
+    end)
+    assert.are.same('restore-hidden-2', state.active().title)
+
+    vim.cmd('TerminalOpen')
+
+    assert.are.same(2, #state.list())
+    assert.are.same({ 'restore-hidden-1', 'restore-hidden-2' }, titles())
+    assert.is_not_nil(state.terminal_window())
+  end)
+
+  it('restores projects into the matching tabpages by tab-local cwd', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local dir1 = vim.fn.tempname()
+    local dir2 = vim.fn.tempname()
+    vim.fn.mkdir(dir1, 'p')
+    vim.fn.mkdir(dir2, 'p')
+
+    vim.cmd('tcd ' .. dir1)
+    terminal.create({ title = 'dir1-a' })
+    terminal.create({ title = 'dir1-b' })
+
+    vim.cmd('tabnew')
+    vim.cmd('tcd ' .. dir2)
+    terminal.create({ title = 'dir2-a' })
+    terminal.create({ title = 'dir2-b' })
+
+    local data = state.serialize()
+
+    reset_editor()
+    setup({ auto_restore = false })
+    terminal = require('terminals.terminal')
+    state = require('terminals.state')
+
+    vim.cmd('tcd ' .. dir1)
+    vim.cmd('tabnew')
+    vim.cmd('tcd ' .. dir2)
+    vim.cmd('tabprevious')
+
+    terminal.restore(data, { show = false })
+
+    local tabs = vim.api.nvim_list_tabpages()
+    assert.are.same(2, #tabs)
+
+    local tab_by_cwd = {}
+    for _, tab in ipairs(tabs) do
+      tab_by_cwd[state.get_tab_cwd(tab)] = tab
+    end
+
+    assert.is_not_nil(tab_by_cwd[dir1])
+    assert.is_not_nil(tab_by_cwd[dir2])
+    assert.are.same({ 'dir1-a', 'dir1-b' }, (function()
+      local result = {}
+      for _, term in ipairs(state.list(tab_by_cwd[dir1])) do
+        result[#result + 1] = term.title
+      end
+      return result
+    end)())
+    assert.are.same({ 'dir2-a', 'dir2-b' }, (function()
+      local result = {}
+      for _, term in ipairs(state.list(tab_by_cwd[dir2])) do
+        result[#result + 1] = term.title
+      end
+      return result
+    end)())
+  end)
+
+  it('restores projects across multiple existing tabpages even without cwd matches', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local dir1 = vim.fn.tempname()
+    local dir2 = vim.fn.tempname()
+    vim.fn.mkdir(dir1, 'p')
+    vim.fn.mkdir(dir2, 'p')
+
+    vim.cmd('tcd ' .. dir1)
+    terminal.create({ title = 'fallback-tab-1' })
+
+    vim.cmd('tabnew')
+    vim.cmd('tcd ' .. dir2)
+    terminal.create({ title = 'fallback-tab-2' })
+
+    local data = state.serialize()
+
+    reset_editor()
+    setup({ auto_restore = false })
+    terminal = require('terminals.terminal')
+    state = require('terminals.state')
+
+    vim.cmd('tabnew')
+
+    terminal.restore(data, { show = false })
+
+    local restored = {}
+    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+      local names = {}
+      for _, term in ipairs(state.list(tab)) do
+        names[#names + 1] = term.title
+      end
+      if #names > 0 then
+        restored[table.concat(names, ',')] = true
+      end
+    end
+
+    assert.is_true(restored['fallback-tab-1'])
+    assert.is_true(restored['fallback-tab-2'])
+  end)
+
+  it('toggles restored terminals open on later tabpages without creating a new one', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local dir1 = vim.fn.tempname()
+    local dir2 = vim.fn.tempname()
+    vim.fn.mkdir(dir1, 'p')
+    vim.fn.mkdir(dir2, 'p')
+
+    vim.cmd('tcd ' .. dir1)
+    terminal.create({ title = 'tab1-only' })
+
+    vim.cmd('tabnew')
+    vim.cmd('tcd ' .. dir2)
+    terminal.create({ title = 'tab2-a' })
+    terminal.create({ title = 'tab2-b' })
+
+    local data = state.serialize()
+
+    reset_editor()
+    setup({ auto_restore = false })
+    terminal = require('terminals.terminal')
+    state = require('terminals.state')
+
+    vim.cmd('tcd ' .. dir1)
+    vim.cmd('tabnew')
+    vim.cmd('tcd ' .. dir2)
+    vim.cmd('tabprevious')
+
+    terminal.restore(data, { show = false })
+
+    local target_tab = nil
+    for _, tab in ipairs(vim.api.nvim_list_tabpages()) do
+      if state.get_tab_cwd(tab) == dir2 then
+        target_tab = tab
+        break
+      end
+    end
+
+    assert.is_not_nil(target_tab)
+    assert.are.same(2, #state.list(target_tab))
+
+    vim.api.nvim_set_current_tabpage(target_tab)
+    vim.cmd('TerminalToggle')
+
+    assert.are.same(2, #state.list(target_tab))
+    local restored = {}
+    for _, term in ipairs(state.list(target_tab)) do
+      restored[#restored + 1] = term.title
+    end
+    assert.are.same({ 'tab2-a', 'tab2-b' }, restored)
+    assert.is_not_nil(state.terminal_window(target_tab))
   end)
 
   it('preserves terminal window layout after restoration', function()
@@ -976,6 +1159,8 @@ describe('terminals.nvim session persistence', function()
 
     reset_editor()
     setup({ auto_restore = false })
+    terminal = require('terminals.terminal')
+    state = require('terminals.state')
 
     terminal.restore(data, { show = true })
 

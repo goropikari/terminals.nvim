@@ -44,8 +44,19 @@ local state = {
 ---@return string
 function M.get_tab_cwd(tabpage)
   tabpage = tabpage or vim.api.nvim_get_current_tabpage()
-  -- Get tab-local CWD if it exists, otherwise global CWD
-  local ok, cwd = pcall(vim.fn.getcwd, -1, tabpage)
+  local tabnr = nil
+  for index, candidate in ipairs(vim.api.nvim_list_tabpages()) do
+    if candidate == tabpage then
+      tabnr = index
+      break
+    end
+  end
+
+  -- Vim's getcwd() expects a tab number, not a Neovim tabpage handle.
+  local ok, cwd = false, nil
+  if tabnr then
+    ok, cwd = pcall(vim.fn.getcwd, -1, tabnr)
+  end
   if not ok then
     cwd = vim.fn.getcwd()
   end
