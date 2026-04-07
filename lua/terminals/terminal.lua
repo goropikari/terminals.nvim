@@ -851,6 +851,33 @@ local function pick_with_ui_select(items, opts)
   return true
 end
 
+---@param items table[]
+---@param opts TerminalsPickOpts
+---@return boolean
+local function pick_with_snacks(items, opts)
+  local snacks = rawget(_G, 'Snacks')
+  if not (snacks and snacks.picker and snacks.picker.select) then
+    local ok, module = pcall(require, 'snacks')
+    if ok then
+      snacks = module
+    end
+  end
+
+  if not (snacks and snacks.picker and snacks.picker.select) then
+    return false
+  end
+
+  snacks.picker.select(items, {
+    prompt = opts.prompt or 'Select terminal',
+    format_item = picker_label,
+  }, function(choice)
+    if choice then
+      M.show(choice.id, { tabpage = opts.tabpage })
+    end
+  end)
+  return true
+end
+
 ---@param bufnr? integer
 ---@param max_lines? integer
 ---@return string[]
@@ -950,6 +977,13 @@ function M.pick(opts)
   end
 
   local backend = opts.backend or 'ui_select'
+  if backend == 'snacks' and pick_with_snacks(items, {
+    prompt = opts.prompt,
+    tabpage = tabpage,
+  }) then
+    return true
+  end
+
   if
     backend == 'telescope'
     and pick_with_telescope(items, {

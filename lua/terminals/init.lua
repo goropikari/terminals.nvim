@@ -160,7 +160,7 @@ local function setup_commands()
       end, {
         nargs = '?',
         complete = function()
-          return { 'ui_select', 'telescope' }
+          return { 'ui_select', 'snacks', 'telescope' }
         end,
       })
     end,

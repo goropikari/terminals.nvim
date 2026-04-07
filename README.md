@@ -132,9 +132,9 @@ require("terminals").setup({
 
 ### Terminal Picker
 
-| Command                                  | Lua                                                             |
-| ---------------------------------------- | --------------------------------------------------------------- |
-| `:TerminalPicker [ui_select\|telescope]` | `require("terminals.terminal").pick({ backend = "telescope" })` |
+| Command                                          | Lua                                                          |
+| ------------------------------------------------ | ------------------------------------------------------------ |
+| `:TerminalPicker [ui_select\|snacks\|telescope]` | `require("terminals.terminal").pick({ backend = "snacks" })` |
 
 ### Terminal Operations
 

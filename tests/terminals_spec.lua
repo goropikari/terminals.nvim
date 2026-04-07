@@ -26,6 +26,7 @@ local getcmdtype_stub = nil
 local getcmdline_stub = nil
 local line_stub = nil
 local telescope_modules = {}
+local snacks_modules = {}
 
 local function clear_modules()
   for name in pairs(package.loaded) do
@@ -37,6 +38,11 @@ local function clear_modules()
     package.loaded[name] = nil
   end
   telescope_modules = {}
+  for name in pairs(snacks_modules) do
+    package.loaded[name] = nil
+  end
+  snacks_modules = {}
+  _G.Snacks = nil
 end
 
 local function clear_commands()
@@ -834,6 +840,35 @@ describe('terminals.nvim', function()
     assert.are.same('bash', captured.highlighter.ft)
   end)
 
+  it('opens a picker with snacks.nvim and switches to the selected terminal', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local ids = create_titles('one', 'two')
+    terminal.show(ids[1])
+
+    local captured = {}
+    snacks_modules['snacks'] = true
+    package.loaded['snacks'] = {
+      picker = {
+        select = function(items, opts, on_choice)
+          captured.items = items
+          captured.prompt = opts.prompt
+          captured.labels = vim.tbl_map(opts.format_item, items)
+          on_choice(items[2])
+        end,
+      },
+    }
+
+    local ok = terminal.pick({ backend = 'snacks', prompt = 'Pick terminal' })
+
+    assert.is_true(ok)
+    assert.are.same('Pick terminal', captured.prompt)
+    assert.are.same(2, #captured.items)
+    assert.are.same('* one [' .. vim.fn.fnamemodify(vim.loop.cwd(), ':t') .. ']', captured.labels[1])
+    assert.are.same('two', state.active().title)
+  end)
+
   it('sends the current line to the active terminal', function()
     local terminal = require('terminals.terminal')
 
@@ -869,5 +904,4 @@ describe('terminals.nvim', function()
       return content:match('irst ') ~= nil
     end)
   end)
-
 end)
