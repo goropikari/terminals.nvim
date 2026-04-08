@@ -504,6 +504,27 @@ describe('terminals.nvim', function()
     assert.are_not.same(previous.id, state.active().id)
   end)
 
+  it('keeps the managed window open when closing the current terminal via the close handler', function()
+    local terminals = require('terminals')
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local ids = create_titles('one', 'two')
+    terminal.show(ids[1])
+    local winid = state.terminal_window()
+    local previous_bufnr = vim.api.nvim_win_get_buf(winid)
+
+    vim.api.nvim_set_current_win(winid)
+    vim.cmd('TerminalClose')
+
+    assert.is_true(vim.api.nvim_win_is_valid(winid))
+    assert.are.same(winid, state.terminal_window())
+    assert.are.same(1, #state.list())
+    assert.are.same(ids[2], state.active().id)
+    assert.are.same(state.active().bufnr, vim.api.nvim_win_get_buf(winid))
+    assert.are_not.same(previous_bufnr, vim.api.nvim_win_get_buf(winid))
+  end)
+
   it('renders the plugin winbar only in the dedicated terminal window', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
@@ -712,6 +733,37 @@ describe('terminals.nvim', function()
 
     assert.are.same({ 'one', 'two', 'three' }, titles())
     assert.are.same('one', state.active().title)
+  end)
+
+  it('keeps the managed window open when middle-click closes the shown terminal', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+    local winbar = require('terminals.ui.winbar')
+
+    local ids = create_titles('one', 'two')
+    terminal.show(ids[1])
+    local winid = state.terminal_window()
+    local previous_bufnr = vim.api.nvim_win_get_buf(winid)
+
+    winbar.render()
+    getmousepos_stub = stub(vim.fn, 'getmousepos')
+    getmousepos_stub.invokes(function()
+      return {
+        winid = winid,
+        wincol = 2,
+        screenrow = 1,
+        screencol = 2,
+      }
+    end)
+
+    _G.TerminalsWinbarClick(ids[1], nil, 'm', nil)
+
+    assert.is_true(vim.api.nvim_win_is_valid(winid))
+    assert.are.same(winid, state.terminal_window())
+    assert.are.same(1, #state.list())
+    assert.are.same(ids[2], state.active().id)
+    assert.are.same(state.active().bufnr, vim.api.nvim_win_get_buf(winid))
+    assert.are_not.same(previous_bufnr, vim.api.nvim_win_get_buf(winid))
   end)
 
   it('shows a drop indicator and reorders only after a real drag threshold is crossed', function()

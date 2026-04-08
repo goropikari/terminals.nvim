@@ -51,9 +51,11 @@ end
 local function cmd_handlers()
   return {
     close = function()
-      local active = require('terminals.terminal').active_id()
-      if active then
-        require('terminals.terminal').close(active)
+      local terminal = require('terminals.terminal').current_or_active()
+      if terminal then
+        require('terminals.terminal').close(terminal.id, {
+          winid = vim.api.nvim_get_current_win(),
+        })
       end
     end,
     move_left = function()
@@ -392,7 +394,10 @@ function M.setup(opts)
     end
 
     if button == 'm' then
-      terminal.close(minwid)
+      terminal.close(minwid, {
+        winid = winid,
+        tabpage = tabpage,
+      })
       return
     end
 

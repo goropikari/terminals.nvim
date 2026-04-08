@@ -1044,6 +1044,13 @@ function M.close(id, opts)
   end
 
   local winid = opts.winid or terminal_window(tabpage)
+  local shown_window_ids = {}
+  for _, terminal_winid in ipairs(state.terminal_windows(tabpage)) do
+    local shown = state.window_terminal(terminal_winid, tabpage)
+    if shown and shown.id == id then
+      shown_window_ids[#shown_window_ids + 1] = terminal_winid
+    end
+  end
   state.remove_terminal(id, tabpage)
 
   local active = state.active(tabpage)
@@ -1052,9 +1059,8 @@ function M.close(id, opts)
   end
 
   if active then
-    for _, terminal_winid in ipairs(state.terminal_windows(tabpage)) do
-      local shown = state.window_terminal(terminal_winid, tabpage)
-      if shown and shown.id == id then
+    for _, terminal_winid in ipairs(shown_window_ids) do
+      if vim.api.nvim_win_is_valid(terminal_winid) then
         M.show(active.id, { tabpage = tabpage, winid = terminal_winid })
       end
     end
@@ -1064,8 +1070,8 @@ function M.close(id, opts)
       tabpage = tabpage,
       winid = winid,
     })
-    for _, terminal_winid in ipairs(state.terminal_windows(tabpage)) do
-      if terminal_winid ~= winid then
+    for _, terminal_winid in ipairs(shown_window_ids) do
+      if terminal_winid ~= winid and vim.api.nvim_win_is_valid(terminal_winid) then
         M.show(active.id, { tabpage = tabpage, winid = terminal_winid })
       end
     end
