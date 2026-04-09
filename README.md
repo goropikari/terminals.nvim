@@ -1,5 +1,7 @@
 # terminals.nvim
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/goropikari/terminals.nvim)
+
 `terminals.nvim` is a Neovim plugin that manages terminal buffers as terminal tabs.
 It renders a terminal tab strip in managed terminal window `winbar`s, supports mouse interaction, and keeps terminal groups isolated per project.
 
