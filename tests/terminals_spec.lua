@@ -288,6 +288,31 @@ describe('terminals.nvim', function()
     assert.are.same(31, vim.api.nvim_win_get_width(state.terminal_window()))
   end)
 
+  it('supports ratio-based terminal height and width', function()
+    local terminals = require('terminals')
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local editor_height = vim.o.lines - vim.o.cmdheight
+    local editor_width = vim.o.columns
+
+    terminals.set_tab_policy({
+      terminal_position = 'bottom',
+      terminal_height = 0.4,
+    })
+    terminal.create({ title = 'ratio-h' })
+    local winid_h = state.terminal_window()
+    assert.are.same(math.floor(editor_height * 0.4), vim.api.nvim_win_get_height(winid_h))
+
+    terminals.set_tab_policy({
+      terminal_position = 'left',
+      terminal_width = 0.2,
+    })
+    terminal.create({ title = 'ratio-w' })
+    local winid_w = state.terminal_window()
+    assert.are.same(math.floor(editor_width * 0.2), vim.api.nvim_win_get_width(winid_w))
+  end)
+
   it('marks the dedicated terminal window as winfixbuf', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')

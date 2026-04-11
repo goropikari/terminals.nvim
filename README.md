@@ -52,8 +52,8 @@ Using `lazy.nvim`:
     osc_title = true,
     start_in_insert = true,
     terminal_position = "bottom",
-    terminal_height = 12,
-    terminal_width = 80,
+    terminal_height = 0.3,
+    terminal_width = 0.5,
     float = {
       width = 0.9,
       height = 0.3,
@@ -74,8 +74,8 @@ Available options:
 - `shell`: default shell or command used by `TerminalNew` when no command is passed; defaults to `vim.o.shell`
 - `start_in_insert`: enter terminal-mode after opening a terminal
 - `terminal_position`: one of `bottom`, `top`, `left`, `right`, `float`
-- `terminal_height`: used only when `terminal_position` is `bottom` or `top`
-- `terminal_width`: used only when `terminal_position` is `left` or `right`
+- `terminal_height`: used only when `terminal_position` is `bottom` or `top`; absolute number or ratio
+- `terminal_width`: used only when `terminal_position` is `left` or `right`; absolute number or ratio
 - `float.width`: used only when `terminal_position` is `float`; absolute number or ratio
 - `float.height`: used only when `terminal_position` is `float`; absolute number or ratio
 - `float.border`: used only when `terminal_position` is `float`

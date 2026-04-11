@@ -9,8 +9,8 @@ local state = require('terminals.state')
 ---@field shell? string
 ---@field start_in_insert boolean
 ---@field terminal_position string
----@field terminal_height integer
----@field terminal_width integer
+---@field terminal_height number
+---@field terminal_width number
 ---@field float { border?: string, height?: number, width?: number, row?: number, col?: number }
 
 ---@class TerminalsCreateOpts
@@ -207,7 +207,7 @@ end
 ---@param value number
 ---@param total integer
 ---@return integer
-local function resolve_float_size(value, total)
+local function resolve_dimension(value, total)
   if type(value) == 'number' and value > 0 and value <= 1 then
     return math.max(1, math.floor(total * value))
   end
@@ -220,8 +220,8 @@ local function create_split_window(tabpage)
   local cfg = config(tabpage)
   local layout = saved_window_layout(tabpage)
   local position = cfg.terminal_position
-  local height = layout and layout.height or cfg.terminal_height
-  local width = layout and layout.width or cfg.terminal_width
+  local height = layout and layout.height or resolve_dimension(cfg.terminal_height, vim.o.lines - vim.o.cmdheight)
+  local width = layout and layout.width or resolve_dimension(cfg.terminal_width, vim.o.columns)
 
   if position == 'top' then
     vim.cmd(string.format('topleft %dsplit', height))
@@ -246,8 +246,8 @@ local function create_float_window(tabpage)
   local layout = saved_window_layout(tabpage)
   local editor_width = vim.o.columns
   local editor_height = vim.o.lines - vim.o.cmdheight
-  local width = layout and layout.width or resolve_float_size(float.width or 0.9, editor_width)
-  local height = layout and layout.height or resolve_float_size(float.height or 0.3, editor_height)
+  local width = layout and layout.width or resolve_dimension(float.width or 0.9, editor_width)
+  local height = layout and layout.height or resolve_dimension(float.height or 0.3, editor_height)
   local row = layout and layout.row or float.row
   local col = layout and layout.col or float.col
 
