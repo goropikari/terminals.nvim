@@ -14,6 +14,6 @@ local terminal = require('terminals.terminal')
 
 vim.keymap.set('t', '<Esc>', [[<C-\><C-n>]], { silent = true })
 vim.keymap.set('n', '<leader>tl', '<cmd>TerminalSendLine<cr>', { desc = 'Send line to terminal', silent = true })
-vim.keymap.set('v', '<leader>ts', function()
+vim.keymap.set('x', '<leader>ts', function()
   terminal.send_visual_selection()
 end, { desc = 'Send selection to terminal', silent = true })

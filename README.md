@@ -164,7 +164,7 @@ Using commands:
 
 ```lua
 vim.keymap.set("n", "<leader>tl", "<cmd>TerminalSendLine<cr>", { desc = "Send line to terminal" })
-vim.keymap.set("v", "<leader>ts", ":'<,'>TerminalSendSelection<cr>", { desc = "Send selection to terminal" })
+vim.keymap.set("x", "<leader>ts", ":'<,'>TerminalSendSelection<cr>", { desc = "Send selection to terminal" })
 ```
 
 Using the Lua API:
@@ -176,8 +176,17 @@ vim.keymap.set("n", "<leader>tl", function()
   terminal.send_current_line()
 end, { desc = "Send line to terminal" })
 
-vim.keymap.set("v", "<leader>ts", function()
+vim.keymap.set("x", "<leader>ts", function()
   terminal.send_visual_selection()
+end, { desc = "Send selection to terminal" })
+```
+
+Use `x` mode for visual-only mappings. If your `<leader>` starts with `s` and you want a mapping like `ss`, explicitly override Visual mode `s` first because the default `s` replaces the current selection:
+
+```lua
+vim.keymap.set("x", "s", "<Nop>")
+vim.keymap.set("x", "ss", function()
+  require("terminals.terminal").send_visual_selection()
 end, { desc = "Send selection to terminal" })
 ```
 
