@@ -19,6 +19,7 @@ local all_commands = {
 
 local stub = require('luassert.stub')
 local visualmode_stub = nil
+local chansend_stub = nil
 local ui_select_stub = nil
 local getmousepos_stub = nil
 local screenpos_stub = nil
@@ -128,6 +129,10 @@ describe('terminals.nvim', function()
     if visualmode_stub then
       visualmode_stub:revert()
       visualmode_stub = nil
+    end
+    if chansend_stub then
+      chansend_stub:revert()
+      chansend_stub = nil
     end
     if ui_select_stub then
       ui_select_stub:revert()
@@ -1018,23 +1023,127 @@ describe('terminals.nvim', function()
     end)
   end)
 
+  it('sends the current line as bracketed paste and submits once', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    state.add_terminal({
+      id = 1,
+      bufnr = vim.api.nvim_create_buf(false, true),
+      job_id = 123,
+      title = 'target',
+      cwd = vim.loop.cwd(),
+      alive = true,
+    })
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'echo hello', 'echo ignored' })
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    chansend_stub = stub(vim.fn, 'chansend')
+
+    local ok = terminal.send_current_line_as_bracketed_paste({ submit_delay_ms = 1 })
+
+    assert.is_true(ok)
+    assert.stub(chansend_stub).was.called_with(123, '\27[200~echo hello\27[201~')
+    wait_for(function()
+      return #chansend_stub.calls == 2
+    end)
+    assert.stub(chansend_stub).was.called_with(123, '\r')
+  end)
+
   it('sends the visual selection to the active terminal', function()
     local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
 
-    terminal.create({ cmd = 'cat', title = 'cat' })
-    vim.cmd('new')
+    state.add_terminal({
+      id = 1,
+      bufnr = vim.api.nvim_create_buf(false, true),
+      job_id = 123,
+      title = 'target',
+      cwd = vim.loop.cwd(),
+      alive = true,
+    })
     vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'first line', 'second line' })
 
     vim.fn.setpos("'<", { 0, 1, 2, 0 })
     vim.fn.setpos("'>", { 0, 1, 6, 0 })
     visualmode_stub = stub(vim.fn, 'visualmode')
     visualmode_stub.returns('v')
-    vim.cmd('1,1TerminalSendSelection')
+    chansend_stub = stub(vim.fn, 'chansend')
 
-    local target = require('terminals.state').active().bufnr
+    local ok = terminal.send_visual_selection()
+
+    assert.is_true(ok)
+    assert.stub(chansend_stub).was.called_with(123, 'irst \n')
+  end)
+
+  it('clips each line for visual block selections', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    state.add_terminal({
+      id = 1,
+      bufnr = vim.api.nvim_create_buf(false, true),
+      job_id = 123,
+      title = 'target',
+      cwd = vim.loop.cwd(),
+      alive = true,
+    })
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'first line', 'second line' })
+
+    vim.fn.setpos("'<", { 0, 1, 2, 0 })
+    vim.fn.setpos("'>", { 0, 2, 6, 0 })
+    visualmode_stub = stub(vim.fn, 'visualmode')
+    visualmode_stub.returns('\22')
+    chansend_stub = stub(vim.fn, 'chansend')
+
+    local ok = terminal.send_visual_selection()
+
+    assert.is_true(ok)
+    assert.stub(chansend_stub).was.called_with(123, 'irst \necond\n')
+  end)
+
+  it('sends the visual selection as bracketed paste and submits once', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    state.add_terminal({
+      id = 1,
+      bufnr = vim.api.nvim_create_buf(false, true),
+      job_id = 123,
+      title = 'target',
+      cwd = vim.loop.cwd(),
+      alive = true,
+    })
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'first line', 'second line' })
+
+    vim.fn.setpos("'<", { 0, 1, 2, 0 })
+    vim.fn.setpos("'>", { 0, 2, 6, 0 })
+    visualmode_stub = stub(vim.fn, 'visualmode')
+    visualmode_stub.returns('v')
+    chansend_stub = stub(vim.fn, 'chansend')
+
+    local ok = terminal.send_visual_selection_as_bracketed_paste({ submit_delay_ms = 1 })
+
+    assert.is_true(ok)
+    assert.stub(chansend_stub).was.called_with(123, '\27[200~irst line\nsecond\27[201~')
     wait_for(function()
-      local content = table.concat(terminal_lines(target), '\n')
-      return content:match('irst ') ~= nil
+      return #chansend_stub.calls == 2
     end)
+    assert.stub(chansend_stub).was.called_with(123, '\r')
+  end)
+
+  it('does not send a bracketed paste visual selection without an active terminal', function()
+    local terminal = require('terminals.terminal')
+
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'first line' })
+    vim.fn.setpos("'<", { 0, 1, 1, 0 })
+    vim.fn.setpos("'>", { 0, 1, 5, 0 })
+    visualmode_stub = stub(vim.fn, 'visualmode')
+    visualmode_stub.returns('v')
+    chansend_stub = stub(vim.fn, 'chansend')
+
+    local ok = terminal.send_visual_selection_as_bracketed_paste()
+
+    assert.is_false(ok)
+    assert.stub(chansend_stub).was_not.called()
   end)
 end)

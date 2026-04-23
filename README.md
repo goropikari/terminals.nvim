@@ -176,18 +176,28 @@ vim.keymap.set("n", "<leader>tl", function()
   terminal.send_current_line()
 end, { desc = "Send line to terminal" })
 
+vim.keymap.set("n", "<leader>sl", function()
+  terminal.send_current_line_as_bracketed_paste()
+end, { desc = "Send line as bracketed paste" })
+
 vim.keymap.set("x", "<leader>ts", function()
   terminal.send_visual_selection()
 end, { desc = "Send selection to terminal" })
+
+vim.keymap.set("x", "<leader>ss", function()
+  terminal.send_visual_selection_as_bracketed_paste()
+end, { desc = "Send selection as bracketed paste" })
 ```
+
+`send_current_line_as_bracketed_paste()` and `send_visual_selection_as_bracketed_paste()` send text with bracketed paste, then submit once at the end. This keeps multiline selections from being submitted line-by-line in interactive terminal applications.
 
 Use `x` mode for visual-only mappings. If your `<leader>` starts with `s` and you want a mapping like `ss`, explicitly override Visual mode `s` first because the default `s` replaces the current selection:
 
 ```lua
 vim.keymap.set("x", "s", "<Nop>")
 vim.keymap.set("x", "ss", function()
-  require("terminals.terminal").send_visual_selection()
-end, { desc = "Send selection to terminal" })
+  require("terminals.terminal").send_visual_selection_as_bracketed_paste()
+end, { desc = "Send selection as bracketed paste" })
 ```
 
 ## Mouse Behavior

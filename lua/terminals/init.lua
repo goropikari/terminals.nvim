@@ -49,40 +49,44 @@ end
 
 -- Command handler implementations (shared with keymaps)
 local function cmd_handlers()
+  local terminal = require('terminals.terminal')
+  local state = require('terminals.state')
+  local winbar = require('terminals.ui.winbar')
+
   return {
     close = function()
-      local terminal = require('terminals.terminal').current_or_active()
-      if terminal then
-        require('terminals.terminal').close(terminal.id, {
+      local current = terminal.current_or_active()
+      if current then
+        terminal.close(current.id, {
           winid = vim.api.nvim_get_current_win(),
         })
       end
     end,
     move_left = function()
-      local terminal = require('terminals.terminal').current_or_active()
-      if terminal then
-        require('terminals.state').move_left(terminal.id)
-        require('terminals.ui.winbar').refresh_all()
+      local current = terminal.current_or_active()
+      if current then
+        state.move_left(current.id)
+        winbar.refresh_all()
       end
     end,
     move_right = function()
-      local terminal = require('terminals.terminal').current_or_active()
-      if terminal then
-        require('terminals.state').move_right(terminal.id)
-        require('terminals.ui.winbar').refresh_all()
+      local current = terminal.current_or_active()
+      if current then
+        state.move_right(current.id)
+        winbar.refresh_all()
       end
     end,
     new = function()
-      require('terminals.terminal').create()
+      terminal.create()
     end,
     next = function()
-      require('terminals.terminal').cycle(1)
+      terminal.cycle(1)
     end,
     prev = function()
-      require('terminals.terminal').cycle(-1)
+      terminal.cycle(-1)
     end,
     toggle = function()
-      require('terminals.terminal').toggle()
+      terminal.toggle()
     end,
   }
 end
@@ -94,95 +98,86 @@ local function setup_commands()
   end
 
   local h = cmd_handlers()
-
-  local command_registry = {
-    TerminalNew = function()
-      vim.api.nvim_create_user_command('TerminalNew', function(opts)
-        require('terminals.terminal').create({ cmd = opts.args ~= '' and opts.args or nil })
-      end, { nargs = '*' })
-    end,
-    TerminalOpen = function()
-      vim.api.nvim_create_user_command('TerminalOpen', function()
-        local active = require('terminals.terminal').active_id()
+  local terminal = require('terminals.terminal')
+  local command_definitions = {
+    TerminalNew = {
+      callback = function(opts)
+        terminal.create({ cmd = opts.args ~= '' and opts.args or nil })
+      end,
+      opts = { nargs = '*' },
+    },
+    TerminalOpen = {
+      callback = function()
+        local active = terminal.active_id()
         if active then
-          require('terminals.terminal').show(active)
+          terminal.show(active)
         else
-          require('terminals.terminal').create()
+          terminal.create()
         end
-      end, {})
-    end,
-    TerminalToggle = function()
-      vim.api.nvim_create_user_command('TerminalToggle', h.toggle, {})
-    end,
-    TerminalCloseWindow = function()
-      vim.api.nvim_create_user_command('TerminalCloseWindow', function()
-        require('terminals.terminal').close_window()
-      end, {})
-    end,
-    TerminalSplit = function()
-      vim.api.nvim_create_user_command('TerminalSplit', function()
-        require('terminals.terminal').open_split()
-      end, {})
-    end,
-    TerminalVSplit = function()
-      vim.api.nvim_create_user_command('TerminalVSplit', function()
-        require('terminals.terminal').open_split({ vertical = true })
-      end, {})
-    end,
-    TerminalSetPosition = function()
-      vim.api.nvim_create_user_command('TerminalSetPosition', function(opts)
+      end,
+    },
+    TerminalToggle = { callback = h.toggle },
+    TerminalCloseWindow = {
+      callback = function()
+        terminal.close_window()
+      end,
+    },
+    TerminalSplit = {
+      callback = function()
+        terminal.open_split()
+      end,
+    },
+    TerminalVSplit = {
+      callback = function()
+        terminal.open_split({ vertical = true })
+      end,
+    },
+    TerminalSetPosition = {
+      callback = function(opts)
         require('terminals').set_tab_policy({
           terminal_position = opts.args,
         })
-      end, {
+      end,
+      opts = {
         nargs = 1,
         complete = function()
           return { 'bottom', 'top', 'left', 'right', 'float' }
         end,
-      })
-    end,
-    TerminalNext = function()
-      vim.api.nvim_create_user_command('TerminalNext', h.next, {})
-    end,
-    TerminalPrev = function()
-      vim.api.nvim_create_user_command('TerminalPrev', h.prev, {})
-    end,
-    TerminalClose = function()
-      vim.api.nvim_create_user_command('TerminalClose', h.close, {})
-    end,
-    TerminalPicker = function()
-      vim.api.nvim_create_user_command('TerminalPicker', function(opts)
+      },
+    },
+    TerminalNext = { callback = h.next },
+    TerminalPrev = { callback = h.prev },
+    TerminalClose = { callback = h.close },
+    TerminalPicker = {
+      callback = function(opts)
         local backend = opts.args ~= '' and opts.args or nil
-        require('terminals.terminal').pick({ backend = backend })
-      end, {
+        terminal.pick({ backend = backend })
+      end,
+      opts = {
         nargs = '?',
         complete = function()
           return { 'ui_select', 'snacks', 'telescope' }
         end,
-      })
-    end,
-    TerminalRename = function()
-      vim.api.nvim_create_user_command('TerminalRename', function(opts)
-        local active = require('terminals.terminal').active_id()
+      },
+    },
+    TerminalRename = {
+      callback = function(opts)
+        local active = terminal.active_id()
         if active and opts.args ~= '' then
-          require('terminals.terminal').rename(active, opts.args)
+          terminal.rename(active, opts.args)
         end
-      end, { nargs = 1 })
-    end,
-    TerminalMoveLeft = function()
-      vim.api.nvim_create_user_command('TerminalMoveLeft', h.move_left, {})
-    end,
-    TerminalMoveRight = function()
-      vim.api.nvim_create_user_command('TerminalMoveRight', h.move_right, {})
-    end,
-    TerminalSendLine = function()
-      vim.api.nvim_create_user_command('TerminalSendLine', function()
-        require('terminals.terminal').send_current_line()
-      end, {})
-    end,
-    TerminalSendSelection = function()
-      vim.api.nvim_create_user_command('TerminalSendSelection', function(opts)
-        local terminal = require('terminals.terminal')
+      end,
+      opts = { nargs = 1 },
+    },
+    TerminalMoveLeft = { callback = h.move_left },
+    TerminalMoveRight = { callback = h.move_right },
+    TerminalSendLine = {
+      callback = function()
+        terminal.send_current_line()
+      end,
+    },
+    TerminalSendSelection = {
+      callback = function(opts)
         local start_pos = vim.fn.getpos("'<")
         local end_pos = vim.fn.getpos("'>")
         local start_row = start_pos[2]
@@ -194,13 +189,15 @@ local function setup_commands()
         end
 
         terminal.send_range(opts.line1, opts.line2)
-      end, { range = true })
-    end,
+      end,
+      opts = { range = true },
+    },
   }
 
   for _, command_name in ipairs(commands) do
-    if command_registry[command_name] then
-      command_registry[command_name]()
+    local command = command_definitions[command_name]
+    if command then
+      vim.api.nvim_create_user_command(command_name, command.callback, command.opts or {})
     end
   end
 end

@@ -27,7 +27,6 @@
 ---@field primary_terminal_winid? integer
 ---@field terminal_winids integer[]
 ---@field window_terminal_ids table<integer, integer?>
----@field terminal_winid? integer
 ---@field window_layout? TerminalsWindowLayout
 
 ---@class TerminalsStateStore
@@ -123,7 +122,6 @@ function M.get_tab(tabpage)
       primary_terminal_winid = nil,
       terminal_winids = {},
       window_terminal_ids = {},
-      terminal_winid = nil,
       window_layout = nil,
     }
     state.projects[project_key] = project

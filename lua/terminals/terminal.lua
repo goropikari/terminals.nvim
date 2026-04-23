@@ -28,6 +28,7 @@ local state = require('terminals.state')
 ---@field id? integer
 ---@field tabpage? integer
 ---@field newline? boolean
+---@field submit_delay_ms? integer
 
 ---@class TerminalsPickOpts
 ---@field backend? '"ui_select"'|'"telescope"'|string
@@ -306,10 +307,9 @@ local function ensure_terminal_window(tabpage)
 end
 
 ---@param cmd? string
----@param cwd string
 ---@param tabpage? integer
 ---@return string
-local function title_for_command(cmd, cwd, tabpage)
+local function title_for_command(cmd, tabpage)
   if cmd and cmd ~= '' then
     return vim.fn.fnamemodify(cmd, ':t')
   end
@@ -466,10 +466,9 @@ local function flush_pending_title_sync()
 end
 
 ---@param cmd? string
----@param terminal_id? integer
 ---@param tabpage? integer
 ---@return string
-local function shell_for_command(cmd, terminal_id, tabpage)
+local function shell_for_command(cmd, tabpage)
   if cmd and cmd ~= '' then
     return cmd
   end
@@ -506,13 +505,13 @@ function M.create(opts)
   local term_opts = {
     cwd = cwd,
   }
-  local job_id = vim.fn.termopen(shell_for_command(cmd, terminal_id, tabpage), term_opts)
+  local job_id = vim.fn.termopen(shell_for_command(cmd, tabpage), term_opts)
 
   local terminal = {
     id = terminal_id,
     bufnr = bufnr,
     job_id = job_id,
-    title = opts.title or title_for_command(cmd, cwd, tabpage),
+    title = opts.title or title_for_command(cmd, tabpage),
     cwd = cwd,
     alive = true,
   }
@@ -727,6 +726,34 @@ function M.send_current_line(opts)
   return M.send(line, opts)
 end
 
+---@param payload string
+---@param opts? TerminalsSendOpts
+---@return boolean
+local function send_as_bracketed_paste(payload, opts)
+  opts = opts or {}
+  if payload == '' then
+    return false
+  end
+
+  local terminal = opts.id and state.find_terminal(opts.id, opts.tabpage) or M.current_or_active(opts.tabpage)
+  if not terminal or not terminal.job_id or terminal.job_id <= 0 then
+    return false
+  end
+
+  local job_id = terminal.job_id
+  vim.fn.chansend(job_id, '\27[200~' .. payload .. '\27[201~')
+  vim.defer_fn(function()
+    pcall(vim.fn.chansend, job_id, '\r')
+  end, opts.submit_delay_ms or 20)
+  return true
+end
+
+---@param opts? TerminalsSendOpts
+---@return boolean
+function M.send_current_line_as_bracketed_paste(opts)
+  return send_as_bracketed_paste(vim.api.nvim_get_current_line(), opts)
+end
+
 ---@param start_line? integer
 ---@param end_line? integer
 ---@param opts? TerminalsSendOpts
@@ -742,9 +769,17 @@ function M.send_range(start_line, end_line, opts)
   return M.send(lines, opts)
 end
 
----@param opts? TerminalsSendOpts
----@return boolean
-function M.send_visual_selection(opts)
+---@param bufnr integer
+---@param row integer
+---@param col integer
+---@return integer
+local function clamp_buf_col(bufnr, row, col)
+  local line = vim.api.nvim_buf_get_lines(bufnr, row - 1, row, false)[1] or ''
+  return math.max(0, math.min(col, #line))
+end
+
+---@return string[]?
+local function visual_selection_lines()
   local bufnr = vim.api.nvim_get_current_buf()
   local mode = vim.fn.visualmode()
   local start_pos = vim.fn.getpos("'<")
@@ -753,24 +788,61 @@ function M.send_visual_selection(opts)
   local end_row, end_col = end_pos[2], end_pos[3]
 
   if start_row == 0 or end_row == 0 then
-    return false
+    return nil
   end
   if start_row > end_row or (start_row == end_row and start_col > end_col) then
     start_row, end_row = end_row, start_row
     start_col, end_col = end_col, start_col
   end
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row - 1, end_row, false)
+  local lines
+  if mode == 'V' then
+    lines = vim.api.nvim_buf_get_lines(bufnr, start_row - 1, end_row, false)
+  elseif mode == '\22' then
+    local start_col0 = math.min(start_col, end_col) - 1
+    local end_col0 = math.max(start_col, end_col)
+    lines = {}
+    for row = start_row, end_row do
+      lines[#lines + 1] = vim.api.nvim_buf_get_text(bufnr, row - 1, clamp_buf_col(bufnr, row, start_col0), row - 1, clamp_buf_col(bufnr, row, end_col0), {})[1]
+        or ''
+    end
+  else
+    lines =
+      vim.api.nvim_buf_get_text(bufnr, start_row - 1, clamp_buf_col(bufnr, start_row, start_col - 1), end_row - 1, clamp_buf_col(bufnr, end_row, end_col), {})
+  end
+
   if #lines == 0 then
+    return nil
+  end
+  return lines
+end
+
+---@param opts? TerminalsSendOpts
+---@return boolean
+function M.send_visual_selection(opts)
+  local lines = visual_selection_lines()
+  if not lines then
     return false
   end
 
-  if mode == 'v' or mode == '\22' then
-    lines[1] = string.sub(lines[1], start_col, #lines[1])
-    lines[#lines] = string.sub(lines[#lines], 1, end_col)
+  return M.send(lines, opts)
+end
+
+---@param opts? TerminalsSendOpts
+---@return boolean
+function M.send_visual_selection_as_bracketed_paste(opts)
+  opts = opts or {}
+  local lines = visual_selection_lines()
+  if not lines then
+    return false
   end
 
-  return M.send(lines, opts)
+  local payload = table.concat(lines, '\n')
+  if payload == '' then
+    return false
+  end
+
+  return send_as_bracketed_paste(payload, opts)
 end
 
 ---@param step integer
