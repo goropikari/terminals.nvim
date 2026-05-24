@@ -2,3 +2,4 @@
 .nvimlog
 nvim.log
 .claude/worktrees
+.claude/settings.local.json

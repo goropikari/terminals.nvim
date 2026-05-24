@@ -10,6 +10,7 @@ local M = {
   layouts = {},
 }
 
+local WINBAR_EXPR = "%!v:lua.require'terminals.ui.winbar'.render()"
 local DROP_MARKER = '%#TerminalsWinbarFill# %#TerminalsWinbarDrag#▏%#TerminalsWinbarFill# '
 
 ---@param title string
@@ -68,6 +69,15 @@ local function add_button()
   return '%#TerminalsWinbarButton#%@v:lua.TerminalsWinbarAdd@ + %X'
 end
 
+---@return integer
+local function render_winid()
+  local winid = vim.g.statusline_winid
+  if type(winid) == 'number' and vim.api.nvim_win_is_valid(winid) then
+    return winid
+  end
+  return vim.api.nvim_get_current_win()
+end
+
 ---@param winid integer
 ---@param tabpage integer
 ---@return string[], TerminalsWinbarLayoutEntry[]
@@ -111,7 +121,7 @@ end
 
 ---@return TerminalsWinbarLayoutEntry[]
 local function current_layout()
-  local winid = vim.api.nvim_get_current_win()
+  local winid = render_winid()
   local tabpage = vim.api.nvim_win_get_tabpage(winid)
   local _, entries = build_tabs(winid, tabpage)
   M.layouts[winid] = entries
@@ -120,7 +130,7 @@ end
 
 ---@return string
 local function render_tabs()
-  local winid = vim.api.nvim_get_current_win()
+  local winid = render_winid()
   local tabpage = vim.api.nvim_win_get_tabpage(winid)
   local chunks = build_tabs(winid, tabpage)
   return table.concat(chunks, '')
@@ -129,7 +139,7 @@ end
 ---@return string
 function M.render()
   current_layout()
-  local tabpage = vim.api.nvim_get_current_tabpage()
+  local tabpage = vim.api.nvim_win_get_tabpage(render_winid())
   if #tabs_for_current_tabpage(tabpage) == 0 then
     return ''
   end
@@ -190,7 +200,7 @@ function M.refresh_window(winid)
     return
   end
 
-  vim.wo[winid].winbar = "%{%v:lua.require'terminals.ui.winbar'.render()%}"
+  vim.wo[winid].winbar = WINBAR_EXPR
 end
 
 ---@param terminal_id integer

@@ -4,6 +4,24 @@ vim.g.mapleader = ','
 vim.opt.runtimepath:prepend(vim.fn.getcwd())
 
 require('terminals').setup({
+  commands = {
+    'TerminalNew',
+    'TerminalOpen',
+    'TerminalToggle',
+    'TerminalCloseWindow',
+    'TerminalSplit',
+    'TerminalVSplit',
+    'TerminalSetPosition',
+    'TerminalNext',
+    'TerminalPrev',
+    'TerminalClose',
+    'TerminalPicker',
+    'TerminalRename',
+    'TerminalMoveLeft',
+    'TerminalMoveRight',
+    'TerminalSendLine',
+    'TerminalSendSelection',
+  },
   keymaps = {
     next = { lhs = '<A-n>', modes = { 'n', 't' } },
     move_right = { lhs = '<C-A-n>', modes = { 'n', 't' } },

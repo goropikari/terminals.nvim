@@ -59,6 +59,7 @@ local function reset_editor()
   clear_modules()
   _G.TerminalsWinbarClick = nil
   _G.TerminalsWinbarAdd = nil
+  vim.g.statusline_winid = nil
 
   while #vim.api.nvim_list_tabpages() > 1 do
     vim.cmd('silent! tabclose!')
@@ -293,6 +294,26 @@ describe('terminals.nvim', function()
     assert.are.same(31, vim.api.nvim_win_get_width(state.terminal_window()))
   end)
 
+  it('keeps the terminal cursor at the prompt after split toggle', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local term = terminal.create({ cmd = 'printf "alpha\\nbeta\\nprompt> "; cat', title = 'one' })
+    wait_for(function()
+      return table.concat(vim.api.nvim_buf_get_lines(term.bufnr, 0, -1, false), '\n'):match('prompt> ') ~= nil
+    end)
+
+    terminal.open_split()
+    terminal.toggle()
+    terminal.toggle()
+
+    local winid = state.terminal_window()
+    local cursor = vim.api.nvim_win_get_cursor(winid)
+    local line = vim.api.nvim_buf_get_lines(term.bufnr, cursor[1] - 1, cursor[1], false)[1] or ''
+    assert.are.same('prompt> ', line)
+    assert.are.same(#line - 1, cursor[2])
+  end)
+
   it('supports ratio-based terminal height and width', function()
     local terminals = require('terminals')
     local terminal = require('terminals.terminal')
@@ -399,6 +420,48 @@ describe('terminals.nvim', function()
     assert.are.same(state.find_terminal(ids[3]).bufnr, vim.api.nvim_win_get_buf(right))
   end)
 
+  it('renders winbar tabs for the target managed split', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+    local winbar = require('terminals.ui.winbar')
+
+    local ids = create_titles('one', 'two')
+    terminal.show(ids[1], { winid = state.terminal_window() })
+    vim.cmd('TerminalVSplit')
+    local right = vim.api.nvim_get_current_win()
+    local left = state.terminal_window()
+
+    terminal.show(ids[1], { winid = left })
+    terminal.show(ids[2], { winid = right })
+    vim.api.nvim_set_current_win(right)
+
+    vim.g.statusline_winid = left
+    winbar.render()
+    vim.g.statusline_winid = nil
+
+    assert.are.same(ids[1], winbar.layout_for_win(left)[1].id)
+    assert.are.same("%!v:lua.require'terminals.ui.winbar'.render()", vim.wo[left].winbar)
+    assert.are.same("%!v:lua.require'terminals.ui.winbar'.render()", vim.wo[right].winbar)
+  end)
+
+  it('restores a missing winbar on managed split enter', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local ids = create_titles('one', 'two')
+    terminal.show(ids[1], { winid = state.terminal_window() })
+    vim.cmd('TerminalVSplit')
+    local right = vim.api.nvim_get_current_win()
+    local left = state.terminal_window()
+
+    vim.wo[left].winbar = ''
+    vim.api.nvim_set_current_win(left)
+    vim.api.nvim_exec_autocmds('WinEnter', {})
+
+    assert.are.same("%!v:lua.require'terminals.ui.winbar'.render()", vim.wo[left].winbar)
+    assert.are.same("%!v:lua.require'terminals.ui.winbar'.render()", vim.wo[right].winbar)
+  end)
+
   it('does not auto-register a regular window that shows a terminal buffer', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
@@ -448,6 +511,27 @@ describe('terminals.nvim', function()
     end)
 
     assert.are.same(2, #state.terminal_windows())
+  end)
+
+  it('registers a ctrl-w split from a managed terminal window', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    terminal.create({ title = 'one' })
+    local root = state.terminal_window()
+    local windows_before = #vim.api.nvim_tabpage_list_wins(0)
+
+    vim.api.nvim_set_current_win(root)
+    vim.cmd('wincmd v')
+    local split = vim.api.nvim_get_current_win()
+    wait_for(function()
+      return #state.terminal_windows() == 2
+    end)
+
+    assert.are.same(windows_before + 1, #vim.api.nvim_tabpage_list_wins(0))
+    assert.are.same(state.active().bufnr, vim.api.nvim_win_get_buf(split))
+    assert.is_true(state.is_terminal_window(split))
+    assert.are.same("%!v:lua.require'terminals.ui.winbar'.render()", vim.wo[split].winbar)
   end)
 
   it('closes only the current managed terminal window', function()
