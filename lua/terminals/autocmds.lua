@@ -1,4 +1,38 @@
+local state = require('terminals.state')
+
 local M = {}
+
+---@param bufnr integer
+---@param terminal TerminalsTerminal
+---@param tabpage integer
+---@return integer?
+local function close_target_winid(bufnr, terminal, tabpage)
+  local current = vim.api.nvim_get_current_win()
+  if vim.api.nvim_win_is_valid(current) and state.is_terminal_window(current, tabpage) then
+    local ok, current_bufnr = pcall(vim.api.nvim_win_get_buf, current)
+    if ok and current_bufnr == bufnr then
+      return current
+    end
+  end
+
+  for _, winid in ipairs(state.terminal_windows(tabpage)) do
+    if vim.api.nvim_win_is_valid(winid) then
+      local ok, win_bufnr = pcall(vim.api.nvim_win_get_buf, winid)
+      if ok and win_bufnr == bufnr then
+        return winid
+      end
+    end
+  end
+
+  for _, winid in ipairs(state.terminal_windows(tabpage)) do
+    local shown = state.window_terminal(winid, tabpage)
+    if shown and shown.id == terminal.id and vim.api.nvim_win_is_valid(winid) then
+      return winid
+    end
+  end
+
+  return state.terminal_window(tabpage)
+end
 
 ---@param setup_highlights fun()
 function M.setup(setup_highlights)
@@ -32,12 +66,11 @@ function M.setup(setup_highlights)
     end,
   })
 
-  vim.api.nvim_create_autocmd({ 'TermClose', 'BufDelete' }, {
+  vim.api.nvim_create_autocmd({ 'TermClose', 'BufDelete', 'BufUnload' }, {
     group = group,
     callback = function(args)
       local terminals = require('terminals')
       local terminal_api = require('terminals.terminal')
-      local state = require('terminals.state')
       local terminal, _, tabpage = state.find_terminal_by_bufnr(args.buf)
       if terminal then
         if terminals._is_quitting then
@@ -58,7 +91,48 @@ function M.setup(setup_highlights)
           return
         end
 
-        state.remove_terminal(terminal.id, tabpage)
+        if args.event == 'TermClose' then
+          terminal.alive = false
+          require('terminals.ui.winbar').refresh_all()
+          return
+        end
+
+        local winid = close_target_winid(args.buf, terminal, tabpage)
+        if args.event == 'BufUnload' then
+          local cwd = terminal.cwd
+          vim.schedule(function()
+            local existing = state.find_terminal(terminal.id, tabpage)
+            if not existing then
+              return
+            end
+
+            terminal_api.close(terminal.id, {
+              tabpage = tabpage,
+              winid = winid and vim.api.nvim_win_is_valid(winid) and winid or state.terminal_window(tabpage),
+            })
+
+            if state.terminal_window(tabpage) then
+              return
+            end
+
+            local active = state.active(tabpage)
+            if active then
+              terminal_api.show(active.id, { tabpage = tabpage })
+            elseif not terminals._is_quitting then
+              terminal_api.create({
+                cwd = cwd,
+                tabpage = tabpage,
+              })
+            end
+          end)
+          require('terminals.ui.winbar').refresh_all()
+          return
+        end
+
+        terminal_api.close(terminal.id, {
+          tabpage = tabpage,
+          winid = winid,
+        })
         require('terminals.ui.winbar').refresh_all()
       end
     end,
@@ -84,7 +158,6 @@ function M.setup(setup_highlights)
       if not closed then
         return
       end
-      local state = require('terminals.state')
       for _, tabpage in ipairs(vim.api.nvim_list_tabpages()) do
         if state.is_terminal_window(closed, tabpage) then
           state.remove_terminal_window(closed, tabpage)

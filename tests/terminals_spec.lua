@@ -639,6 +639,74 @@ describe('terminals.nvim', function()
     assert.are_not.same(previous_bufnr, vim.api.nvim_win_get_buf(winid))
   end)
 
+  it('creates a fresh terminal when deleting the last exited terminal buffer', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local previous = terminal.create({ cmd = 'printf "done\\n"', title = 'solo' })
+
+    wait_for(function()
+      return previous.alive == false
+    end)
+    vim.api.nvim_buf_delete(previous.bufnr, { force = true })
+
+    wait_for(function()
+      local active = state.active()
+      local current_winid = state.terminal_window()
+      return current_winid ~= nil
+        and vim.api.nvim_win_is_valid(current_winid)
+        and state.is_terminal_window(current_winid)
+        and #state.list() == 1
+        and active ~= nil
+        and active.bufnr ~= previous.bufnr
+        and vim.api.nvim_win_get_buf(current_winid) == active.bufnr
+    end)
+
+    local current_winid = state.terminal_window()
+    assert.is_true(vim.api.nvim_win_is_valid(current_winid))
+    assert.is_true(state.is_terminal_window(current_winid))
+    assert.are.same(1, #state.list())
+    assert.is_not_nil(state.active())
+    assert.are_not.same(previous.bufnr, state.active().bufnr)
+    assert.are.same(state.active().bufnr, vim.api.nvim_win_get_buf(current_winid))
+  end)
+
+  it('switches to a sibling terminal when deleting the shown exited terminal buffer', function()
+    local terminal = require('terminals.terminal')
+    local state = require('terminals.state')
+
+    local first = terminal.create({ cmd = 'printf "done\\n"', title = 'one' })
+    wait_for(function()
+      return first.alive == false
+    end)
+
+    local second = terminal.create({ title = 'two' })
+    local ids = { first.id, second.id }
+    terminal.show(ids[1])
+    local previous = state.window_terminal(state.terminal_window())
+
+    vim.api.nvim_buf_delete(previous.bufnr, { force = true })
+
+    wait_for(function()
+      local active = state.active()
+      local current_winid = state.terminal_window()
+      return current_winid ~= nil
+        and vim.api.nvim_win_is_valid(current_winid)
+        and state.is_terminal_window(current_winid)
+        and #state.list() == 1
+        and active ~= nil
+        and active.id == ids[2]
+        and vim.api.nvim_win_get_buf(current_winid) == active.bufnr
+    end)
+
+    local current_winid = state.terminal_window()
+    assert.is_true(vim.api.nvim_win_is_valid(current_winid))
+    assert.is_true(state.is_terminal_window(current_winid))
+    assert.are.same(1, #state.list())
+    assert.are.same(ids[2], state.active().id)
+    assert.are.same(state.active().bufnr, vim.api.nvim_win_get_buf(current_winid))
+  end)
+
   it('renders the plugin winbar only in the dedicated terminal window', function()
     local terminal = require('terminals.terminal')
     local state = require('terminals.state')
